@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+
+# n8n
+el_workflow.json
+
+# Local output and logs
+output/
+*.log
+
+# Project analysis
+graphify-out/
+.claude/
+.gemini/
+
+# OS generated files
+.DS_Store
+Thumbs.db

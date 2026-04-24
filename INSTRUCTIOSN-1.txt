@@ -1,0 +1,211 @@
+Build a complete Python script: `trending_india_pipeline.py`
+
+## PURPOSE
+Fetch trending topics from India, expand them into product-intent signals 
+for a dropshipping pipeline, and export structured JSON.
+
+## EXACT OUTPUT FORMAT
+File: `trending_india_<YYYY-MM-DD>.json`
+Schema:
+{
+  "metadata": {
+    "scraped_at": "<ISO timestamp>",
+    "geo": "IN",
+    "total_topics": <int>,
+    "sources": ["google_trends_realtime", "google_trends_daily", "youtube_trending"]
+  },
+  "trends": [
+    {
+      "rank": 1,
+      "topic": "<string>",
+      "traffic_estimate": "<string>",  // e.g. "500K+" if available, else "N/A"
+      "source": "<source_name>",
+      "related_queries": ["<string>", ...],  // min 3, max 10
+      "product_intent_score": <0.0-1.0>,     // heuristic, not AI
+      "suggested_categories": ["<string>"]   // derived from keywords
+    }
+  ]
+}
+
+## SOURCES TO IMPLEMENT (in priority order)
+
+### 1. pytrends-modern (PRIMARY)
+- Install: pip install pytrends-modern
+- realtime_trending_searches(pn='IN') → parse all story titles + articles
+- trending_searches(pn='india') → daily hot searches
+- For each trend topic, call related_queries() with geo='IN', timeframe='now 1-d'
+- Add 5s sleep between related_queries() calls to avoid rate limiting
+- Wrap every pytrends call in try/except — if rate limited, skip and continue
+
+### 2. YouTube Data API v3 (SECONDARY)
+- Endpoint: https://www.googleapis.com/youtube/v3/videos
+- Params: chart=mostPopular, regionCode=IN, maxResults=50, part=snippet
+- API key read from env var: YOUTUBE_API_KEY
+- Extract: video title, tags, category
+- If YOUTUBE_API_KEY not set → skip silently, log warning
+
+### 3. Google News RSS (TERTIARY)  
+- URL: https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en
+- Parse with feedparser
+- Extract top 50 entry titles
+- Use as additional topic signals
+
+## PRODUCT INTENT SCORING (no AI, pure heuristic)
+Score 0.0–1.0 based on keyword presence:
+
+High intent keywords (score += 0.3 each, max 1.0):
+  buy, price, cheap, best, review, order, shop, deal, discount,
+  under 500, under 1000, combo, kit, pack, wireless, portable,
+  india 2026, trending, new, latest, vs, comparison
+  - Immediate Transactional (Highest Intent: Wallet is out)
+  sale, offer, coupon, promo code, clearance
+  cash on delivery, cod, free shipping, emi
+  in stock, where to buy, lowest price, cheap price
+  wholesale, bulk, dropship, distributor
+  near me (when combined with a product name)
+  - Commercial Investigation (High Intent: Narrowing down options)
+  alternative to, similar to, replacement for
+  specs, specifications, features, dimensions
+  unboxing, hands on, teardown, test
+  pros and cons, is it worth it, buying guide
+  top 10, top 5, tier list, ranking
+  benchmarks (especially useful for hardware/electronics)
+  reddit, quora (users often append these to bypass SEO spam and find real reviews)
+  - Product Status & Trust Verifiers (Medium-High Intent)
+  original, authentic, genuine, fake vs real
+  refurbished, second hand, used, open box
+  warranty, return policy, customer service
+  size chart, colors, variants, edition
+  - Urgency & Trend Indicators (High Intent: Time-sensitive)
+  flash sale, limited time, lightning deal
+  restock, sold out, in stock tracker
+  pre-order, launch date, release date, early access
+  -Negative Intent (Subtract Score: Informational/DIY)
+  how to, tutorial, diy, repair, fix, not working, error, broken, manual, pdf, driver download, free download
+
+Category mapping dict:
+category_mapping = {
+    "electronics": [
+        "wireless", "bluetooth", "earbuds", "phone", "laptop", "USB", 
+        "charger", "LED", "power bank", "smartwatch", "speaker", 
+        "monitor", "cable", "adapter", "tablet", "camera"
+    ],
+    "fashion": [
+        "shirt", "dress", "kurta", "saree", "sneakers", "watch", "bag", 
+        "sunglasses", "jeans", "t-shirt", "jacket", "shoes", "hoodie", 
+        "heels", "wallet", "belt"
+    ],
+    "home": [
+        "kitchen", "decor", "organizer", "cleaning", "storage", "fan", 
+        "cooler", "light", "bottle", "bedsheet", "pillow", "cookware", 
+        "blender", "mop", "towel", "vacuum"
+    ],
+    "fitness": [
+        "gym", "yoga", "protein", "supplement", "band", "tracker", 
+        "cycle", "dumbbells", "mat", "creatine", "whey", "treadmill", 
+        "resistance", "shaker", "massager"
+    ],
+    "beauty": [
+        "skincare", "hair", "serum", "moisturizer", "lipstick", 
+        "foundation", "sunscreen", "shampoo", "perfume", "lotion", 
+        "concealer", "trimmer", "face wash", "makeup", "cleanser"
+    ],
+    "accessories": [
+        "case", "cover", "stand", "holder", "mount", "strap", 
+        "tempered glass", "sleeve", "skin", "guard", "ring", 
+        "tripod", "grip", "hub"
+    ],
+    "automotive": [
+        "car", "bike", "helmet", "dashcam", "tyre", "wax", 
+        "polish", "wiper", "gps", "inflator", "mat", "coolant", 
+        "scratch", "jump starter", "perfume"
+    ],
+    "baby_and_kids": [
+        "toy", "puzzle", "lego", "diaper", "stroller", "wipes", 
+        "pacifier", "onesie", "rattle", "plush", "scooter", 
+        "doll", "action figure", "bottle"
+    ],
+    "pets": [
+        "dog", "cat", "food", "collar", "leash", "bed", 
+        "litter", "treats", "aquarium", "grooming", "cage", 
+        "harness", "shampoo", "bowl"
+    ],
+    "office_and_stationery": [
+        "book", "notebook", "pen", "desk", "chair", "printer", 
+        "paper", "marker", "folder", "diary", "planner", 
+        "stapler", "calculator", "ink"
+    ],
+    "health_and_medical": [
+        "thermometer", "massager", "vitamins", "mask", "sanitizer", 
+        "first aid", "scale", "oximeter", "braces", "monitor", 
+        "inhaler", "test kit", "support"
+    ],
+    "tools_and_hardware": [
+        "drill", "screwdriver", "wrench", "saw", "tape", 
+        "hammer", "screws", "pliers", "multimeter", "ladder", 
+        "glue", "toolkit", "nails", "hinge"
+    ],
+    "grocery_and_food": [
+        "coffee", "tea", "snacks", "chocolate", "dry fruits", 
+        "oil", "rice", "spices", "honey", "noodles", 
+        "sauce", "cereal", "pasta", "biscuit"
+    ]
+}
+
+## DEDUPLICATION
+- Normalize: lowercase, strip punctuation, remove stopwords (a, the, in, of, for, with, is, are, was)
+- If two topics have >70% word overlap → keep the one with more related_queries
+- Final output: deduplicated, sorted by product_intent_score DESC
+
+## ERROR HANDLING
+- Every network call wrapped in try/except with specific error messages
+- If pytrends completely fails → still run YouTube + RSS sources
+- Log all errors to: `pipeline_errors_<date>.log`
+- Script should NEVER crash — always produce output even if partial
+
+## CONFIGURATION (top of file, easy to modify)
+CONFIG = {
+    "geo": "IN",
+    "language": "en-IN", 
+    "max_topics": 1000,
+    "request_delay_seconds": 5,
+    "youtube_max_results": 50,
+    "rss_max_entries": 100,
+    "min_product_intent_score": 0.0,  // include all, let downstream filter
+    "output_dir": "./output"
+}
+
+## DEPENDENCIES (auto-install block at top)
+import subprocess, sys
+def install(pkg): subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "-q"])
+# install all required packages before imports
+
+Required packages:
+- pytrends-modern
+- feedparser
+- requests
+- python-dotenv
+
+## ENTRYPOINT
+if __name__ == "__main__":
+    pipeline = TrendingIndiaPipeline(CONFIG)
+    results = pipeline.run()
+    pipeline.export_json(results)
+    print(f"Done. {len(results['trends'])} topics exported.")
+
+## CODE QUALITY REQUIREMENTS
+- Full type hints on all functions
+- Docstring on every method
+- Class-based: TrendingIndiaPipeline with methods:
+    .fetch_pytrends_realtime() → list[dict]
+    .fetch_pytrends_daily() → list[dict]
+    .fetch_youtube_trending() → list[dict]
+    .fetch_google_news_rss() → list[dict]
+    .expand_related_queries(topic: str) → list[str]
+    .score_product_intent(topic: str, related: list[str]) → float
+    .map_categories(topic: str, related: list[str]) → list[str]
+    .deduplicate(topics: list[dict]) → list[dict]
+    .run() → dict
+    .export_json(data: dict) → str  // returns output filepath
+
+Write the complete, runnable script. No placeholders. No TODOs.
