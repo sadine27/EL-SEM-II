@@ -6,8 +6,8 @@ __pycache__/
 # Environment variables
 .env
 
-# n8n
-el_workflow.json
+# n8n secrets (workflow file is safe to commit - no hardcoded keys)
+# el_workflow.json
 
 # Local output and logs
 output/

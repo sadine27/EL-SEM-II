@@ -1,0 +1,64 @@
+{
+  "name": "EL",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "days", "daysInterval": 1}]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [-600, 0],
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Every 24 Hours"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {"name": "chart",      "value": "mostPopular"},
+            {"name": "regionCode", "value": "IN"},
+            {"name": "maxResults", "value": "50"},
+            {"name": "part",       "value": "snippet"}
+          ]
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpQueryAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "rutAZsTO756iwAr6",
+          "name": "YouTube API Key"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-380, 0],
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "YouTube Trending IN"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- Source 1: YouTube (from previous node) ---\nlet ytItems = [];\ntry {\n  const ytResp = $input.first().json;\n  for (const v of (ytResp.items || [])) {\n    const sn = v.snippet || {};\n    if (sn.title) ytItems.push({ topic: sn.title.trim(), source: 'youtube_trending', tags: sn.tags || [] });\n  }\n} catch(e) { console.log('YouTube parse failed:', e.message); }\n\n// --- Source 2: Google Trends Daily RSS ---\nlet trendsItems = [];\ntry {\n  const r = await $http.get('https://trends.google.com/trends/trendingsearches/daily/rss?geo=IN');\n  const xml = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);\n  const matches = [...xml.matchAll(/<title>(?:<!\\[CDATA\\[)?([^<\\]]+?)(?:\\]\\]>)?<\\/title>/g)];\n  for (const m of matches.slice(1)) {\n    const t = m[1].trim();\n    if (t) trendsItems.push({ topic: t, source: 'google_trends_daily', tags: [] });\n  }\n} catch(e) { console.log('Trends RSS failed:', e.message); }\n\n// --- Source 3: Google News RSS ---\nlet newsItems = [];\ntry {\n  const r = await $http.get('https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en');\n  const xml = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);\n  const matches = [...xml.matchAll(/<title>(?:<!\\[CDATA\\[)?([^<\\]]+?)(?:\\]\\]>)?<\\/title>/g)];\n  for (const m of matches.slice(1, 101)) {\n    const t = m[1].trim();\n    if (t) newsItems.push({ topic: t, source: 'google_news_rss', tags: [] });\n  }\n} catch(e) { console.log('News RSS failed:', e.message); }\n\n// --- Scoring constants (mirrors trending_india_pipeline.py) ---\nconst T1 = ['buy','price','cheap','best','review','order','shop','deal','discount','sale','offer','coupon','promo code','clearance','cash on delivery','cod','free shipping','emi','in stock','where to buy','lowest price','cheap price','wholesale','bulk','dropship','distributor','under 500','under 1000'];\nconst T2 = ['alternative to','similar to','replacement for','specs','specifications','features','dimensions','unboxing','hands on','teardown','pros and cons','is it worth it','buying guide','top 10','top 5','tier list','ranking','benchmarks','reddit','quora','combo','kit','pack','vs','comparison'];\nconst T3 = ['wireless','portable','new','latest','trending','india 2026','original','authentic','genuine','fake vs real','refurbished','second hand','used','open box','warranty','return policy','customer service','size chart','colors','variants','edition','flash sale','limited time','lightning deal','restock','sold out','in stock tracker','pre-order','launch date','release date','early access','near me'];\nconst NEG = ['how to','tutorial','diy','repair','fix','not working','error','broken','manual','pdf','driver download','free download'];\nconst CAT = {\n  electronics: ['wireless','bluetooth','earbuds','phone','laptop','usb','charger','led','power bank','smartwatch','speaker','monitor','cable','adapter','tablet','camera'],\n  fashion: ['shirt','dress','kurta','saree','sneakers','watch','bag','sunglasses','jeans','t-shirt','jacket','shoes','hoodie','heels','wallet','belt'],\n  home: ['kitchen','decor','organizer','cleaning','storage','fan','cooler','light','bottle','bedsheet','pillow','cookware','blender','mop','towel','vacuum'],\n  fitness: ['gym','yoga','protein','supplement','band','tracker','cycle','dumbbells','mat','creatine','whey','treadmill','resistance','shaker','massager'],\n  beauty: ['skincare','hair','serum','moisturizer','lipstick','foundation','sunscreen','shampoo','perfume','lotion','concealer','trimmer','face wash','makeup','cleanser'],\n  accessories: ['case','cover','stand','holder','mount','strap','tempered glass','sleeve','skin','guard','ring','tripod','grip','hub'],\n  automotive: ['car','bike','helmet','dashcam','tyre','wax','polish','wiper','gps','inflator','mat','coolant','scratch','jump starter','perfume'],\n  baby_and_kids: ['toy','puzzle','lego','diaper','stroller','wipes','pacifier','onesie','rattle','plush','scooter','doll','action figure','bottle'],\n  pets: ['dog','cat','food','collar','leash','bed','litter','treats','aquarium','grooming','cage','harness','shampoo','bowl'],\n  office_and_stationery: ['book','notebook','pen','desk','chair','printer','paper','marker','folder','diary','planner','stapler','calculator','ink'],\n  health_and_medical: ['thermometer','massager','vitamins','mask','sanitizer','first aid','scale','oximeter','braces','monitor','inhaler','test kit','support'],\n  tools_and_hardware: ['drill','screwdriver','wrench','saw','tape','hammer','screws','pliers','multimeter','ladder','glue','toolkit','nails','hinge'],\n  grocery_and_food: ['coffee','tea','snacks','chocolate','dry fruits','oil','rice','spices','honey','noodles','sauce','cereal','pasta','biscuit']\n};\nconst STOP = new Set(['a','an','the','in','of','for','with','is','are','was','were','and','or','on','at','to','by','from']);\n\nfunction scoreIntent(topic, related) {\n  const h = [topic, ...related].join(' ').toLowerCase();\n  let s = 0;\n  T1.forEach(p => { if (h.includes(p)) s += 0.30; });\n  T2.forEach(p => { if (h.includes(p)) s += 0.15; });\n  T3.forEach(p => { if (h.includes(p)) s += 0.10; });\n  NEG.forEach(p => { if (h.includes(p)) s -= 0.20; });\n  return Math.round(Math.max(0, Math.min(1, s)) * 1000) / 1000;\n}\n\nfunction mapCats(topic, related) {\n  const h = [topic, ...related].join(' ').toLowerCase();\n  const m = [];\n  for (const [c, kws] of Object.entries(CAT)) {\n    for (const kw of kws) {\n      if (new RegExp('\\\\b' + kw.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&') + '\\\\b').test(h)) { m.push(c); break; }\n    }\n  }\n  return m.length ? m : ['uncategorized'];\n}\n\nfunction normWords(t) {\n  return new Set(t.toLowerCase().replace(/[^\\w\\s]/g,' ').split(/\\s+/).filter(w => w && !STOP.has(w)));\n}\n\nfunction dedupe(items) {\n  const kept = [];\n  for (const c of items) {\n    const cw = normWords(c.topic);\n    if (!cw.size) continue;\n    let di = -1;\n    for (let i = 0; i < kept.length; i++) {\n      const ew = normWords(kept[i].topic);\n      const ov = [...cw].filter(w => ew.has(w)).length;\n      const smaller = Math.min(cw.size, ew.size);\n      if (smaller && ov / smaller > 0.70) { di = i; break; }\n    }\n    if (di === -1) kept.push(c);\n    else if ((c.related_queries||[]).length > (kept[di].related_queries||[]).length) kept[di] = c;\n  }\n  return kept;\n}\n\nconst raw = [...ytItems, ...trendsItems, ...newsItems].slice(0, 1000);\n\nconst enriched = raw.map(item => {\n  const related = item.tags.slice(0, 10);\n  return {\n    topic: item.topic,\n    traffic_estimate: 'N/A',\n    source: item.source,\n    related_queries: related,\n    product_intent_score: scoreIntent(item.topic, related),\n    suggested_categories: mapCats(item.topic, related)\n  };\n});\n\nconst deduped = dedupe(enriched);\ndeduped.sort((a, b) => b.product_intent_score - a.product_intent_score);\nconst ranked = deduped.map((t, i) => ({ rank: i + 1, ...t }));\n\nconst payload = {\n  metadata: {\n    scraped_at: new Date().toISOString(),\n    geo: 'IN',\n    total_topics: ranked.length,\n    sources: ['google_trends_daily', 'youtube_trending', 'google_news_rss']\n  },\n  trends: ranked\n};\n\nconsole.log(`Done: ${ranked.length} topics | YT:${ytItems.length} Trends:${trendsItems.length} News:${newsItems.length}`);\nreturn [{ json: payload }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-100, 0],
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Fetch . Score . Dedupe . Rank"
+    }
+  ],
+  "connections": {
+    "Every 24 Hours": {
+      "main": [[{"node": "YouTube Trending IN", "type": "main", "index": 0}]]
+    },
+    "YouTube Trending IN": {
+      "main": [[{"node": "Fetch . Score . Dedupe . Rank", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"}
+}
