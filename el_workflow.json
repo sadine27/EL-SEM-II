@@ -25,8 +25,8 @@
             {"name": "part",       "value": "snippet"}
           ]
         },
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "httpQueryAuth",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
         "options": {}
       },
       "credentials": {
