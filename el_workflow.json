@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-25T14:25:31.654Z",
+  "updatedAt": "2026-04-25T14:51:00.054Z",
   "createdAt": "2026-04-24T18:22:14.287Z",
   "id": "298f3JSOE72nhW59",
   "name": "EL",
@@ -240,13 +240,13 @@
     },
     {
       "parameters": {
-        "modelName": "gemini-2.0-flash",
+        "modelName": "gemini-2.5-flash",
         "options": {}
       },
       "credentials": {
         "googlePalmApi": {
-          "id": "IxM1B3jlFwU2OHUo",
-          "name": "Google Gemini(PaLM) Api account"
+          "id": "Cvq1f78PBbOpwimZ",
+          "name": "Gemini API Key (EL pipeline)"
         }
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
@@ -267,7 +267,7 @@
       },
       "credentials": {
         "postgres": {
-          "id": "3459ynvUBW1DHg2g",
+          "id": "Tx3i0fewZ8MM6LFt",
           "name": "Supabase yatralounge (Dropship Memory)"
         }
       },
@@ -283,37 +283,10 @@
     {
       "parameters": {
         "name": "web_search",
-        "description": "Search the web for current product demand, pricing, competition and market trends in India. Use this to verify if a trending topic has genuine commercial dropshipping potential.",
-        "method": "POST",
-        "url": "https://api.tavily.com/search",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "api_key",
-              "value": "REDACTED_TAVILY_KEY"
-            },
-            {
-              "name": "query",
-              "value": "={{ $fromAI('query', 'The product or topic to search', 'string') }}"
-            },
-            {
-              "name": "max_results",
-              "value": "5"
-            },
-            {
-              "name": "include_answer",
-              "value": "true"
-            },
-            {
-              "name": "search_depth",
-              "value": "basic"
-            }
-          ]
-        },
-        "options": {}
+        "description": "Search the web for current product demand, pricing, competition and market trends in India. Input: the search query string.",
+        "jsCode": "const inp = $input.first().json;\nconst query = String(inp.query ?? inp.input ?? inp.text ?? '');\nif (!query) return 'No query provided';\n\nconst res = await fetch('https://api.tavily.com/search', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    api_key: 'REDACTED_TAVILY_KEY',\n    query: query,\n    max_results: 5,\n    include_answer: true,\n    search_depth: 'basic'\n  })\n});\nconst d = await res.json();\nconst answer = d.answer || '';\nconst results = (d.results || []).slice(0, 5)\n  .map(r => `- ${r.title}: ${(r.snippet || r.content || '').substring(0, 200)}`)\n  .join('\\n');\nreturn answer ? `${answer}\\n\\nSources:\\n${results}` : results || 'No results found';"
       },
-      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
       "typeVersion": 1.1,
       "position": [
         1000,
@@ -372,6 +345,33 @@
       ],
       "id": "p2-0007-0007-0007-000000000007",
       "name": "Write Curated Picks"
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "create",
+        "documentId": {
+          "__rl": true,
+          "value": "1WVIWkLHZkNw4mqUQwnUy0j2k_5eogREcCfPySzRLn2A",
+          "mode": "id"
+        },
+        "title": "Curated Picks"
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cj9iWqqC2UMVE3PQ",
+          "name": "sharma divyesh api"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        200,
+        350
+      ],
+      "id": "p2-0008-0008-0008-000000000008",
+      "name": "Create Curated Picks Tab",
+      "continueOnFail": true
     }
   ],
   "connections": {
@@ -412,6 +412,11 @@
           },
           {
             "node": "Filter Top 30",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Curated Picks Tab",
             "type": "main",
             "index": 0
           }
@@ -531,9 +536,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "2e56183f-2f49-42ae-8bf2-014e91c0094f",
-  "activeVersionId": "2e56183f-2f49-42ae-8bf2-014e91c0094f",
-  "versionCounter": 66,
+  "versionId": "fd49419b-88b1-4d86-a556-c4fb23535f7b",
+  "activeVersionId": "fd49419b-88b1-4d86-a556-c4fb23535f7b",
+  "versionCounter": 146,
   "triggerCount": 1,
   "shared": [
     {
@@ -556,9 +561,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-04-25T14:25:31.656Z",
-    "createdAt": "2026-04-25T14:25:31.656Z",
-    "versionId": "2e56183f-2f49-42ae-8bf2-014e91c0094f",
+    "updatedAt": "2026-04-25T14:51:00.055Z",
+    "createdAt": "2026-04-25T14:51:00.055Z",
+    "versionId": "fd49419b-88b1-4d86-a556-c4fb23535f7b",
     "workflowId": "298f3JSOE72nhW59",
     "nodes": [
       {
@@ -794,13 +799,13 @@
       },
       {
         "parameters": {
-          "modelName": "gemini-2.0-flash",
+          "modelName": "gemini-2.5-flash",
           "options": {}
         },
         "credentials": {
           "googlePalmApi": {
-            "id": "IxM1B3jlFwU2OHUo",
-            "name": "Google Gemini(PaLM) Api account"
+            "id": "Cvq1f78PBbOpwimZ",
+            "name": "Gemini API Key (EL pipeline)"
           }
         },
         "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
@@ -821,7 +826,7 @@
         },
         "credentials": {
           "postgres": {
-            "id": "3459ynvUBW1DHg2g",
+            "id": "Tx3i0fewZ8MM6LFt",
             "name": "Supabase yatralounge (Dropship Memory)"
           }
         },
@@ -837,37 +842,10 @@
       {
         "parameters": {
           "name": "web_search",
-          "description": "Search the web for current product demand, pricing, competition and market trends in India. Use this to verify if a trending topic has genuine commercial dropshipping potential.",
-          "method": "POST",
-          "url": "https://api.tavily.com/search",
-          "sendBody": true,
-          "bodyParameters": {
-            "parameters": [
-              {
-                "name": "api_key",
-                "value": "REDACTED_TAVILY_KEY"
-              },
-              {
-                "name": "query",
-                "value": "={{ $fromAI('query', 'The product or topic to search', 'string') }}"
-              },
-              {
-                "name": "max_results",
-                "value": "5"
-              },
-              {
-                "name": "include_answer",
-                "value": "true"
-              },
-              {
-                "name": "search_depth",
-                "value": "basic"
-              }
-            ]
-          },
-          "options": {}
+          "description": "Search the web for current product demand, pricing, competition and market trends in India. Input: the search query string.",
+          "jsCode": "const inp = $input.first().json;\nconst query = String(inp.query ?? inp.input ?? inp.text ?? '');\nif (!query) return 'No query provided';\n\nconst res = await fetch('https://api.tavily.com/search', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    api_key: 'REDACTED_TAVILY_KEY',\n    query: query,\n    max_results: 5,\n    include_answer: true,\n    search_depth: 'basic'\n  })\n});\nconst d = await res.json();\nconst answer = d.answer || '';\nconst results = (d.results || []).slice(0, 5)\n  .map(r => `- ${r.title}: ${(r.snippet || r.content || '').substring(0, 200)}`)\n  .join('\\n');\nreturn answer ? `${answer}\\n\\nSources:\\n${results}` : results || 'No results found';"
         },
-        "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+        "type": "@n8n/n8n-nodes-langchain.toolCode",
         "typeVersion": 1.1,
         "position": [
           1000,
@@ -926,6 +904,33 @@
         ],
         "id": "p2-0007-0007-0007-000000000007",
         "name": "Write Curated Picks"
+      },
+      {
+        "parameters": {
+          "resource": "sheet",
+          "operation": "create",
+          "documentId": {
+            "__rl": true,
+            "value": "1WVIWkLHZkNw4mqUQwnUy0j2k_5eogREcCfPySzRLn2A",
+            "mode": "id"
+          },
+          "title": "Curated Picks"
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "cj9iWqqC2UMVE3PQ",
+            "name": "sharma divyesh api"
+          }
+        },
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4,
+        "position": [
+          200,
+          350
+        ],
+        "id": "p2-0008-0008-0008-000000000008",
+        "name": "Create Curated Picks Tab",
+        "continueOnFail": true
       }
     ],
     "connections": {
@@ -966,6 +971,11 @@
             },
             {
               "node": "Filter Top 30",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Create Curated Picks Tab",
               "type": "main",
               "index": 0
             }
@@ -1078,18 +1088,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-04-25T14:25:31.850Z",
-        "id": 35,
+        "createdAt": "2026-04-25T14:51:00.318Z",
+        "id": 83,
         "workflowId": "298f3JSOE72nhW59",
-        "versionId": "2e56183f-2f49-42ae-8bf2-014e91c0094f",
+        "versionId": "fd49419b-88b1-4d86-a556-c4fb23535f7b",
         "event": "activated",
         "userId": "33330254-40a5-470b-996d-faf8a5b9cb11"
       },
       {
-        "createdAt": "2026-04-25T14:25:31.762Z",
-        "id": 34,
+        "createdAt": "2026-04-25T14:51:00.213Z",
+        "id": 82,
         "workflowId": "298f3JSOE72nhW59",
-        "versionId": "2e56183f-2f49-42ae-8bf2-014e91c0094f",
+        "versionId": "fd49419b-88b1-4d86-a556-c4fb23535f7b",
         "event": "deactivated",
         "userId": "33330254-40a5-470b-996d-faf8a5b9cb11"
       }
