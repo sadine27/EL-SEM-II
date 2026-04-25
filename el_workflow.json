@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-25T14:22:28.869Z",
+  "updatedAt": "2026-04-25T14:25:31.654Z",
   "createdAt": "2026-04-24T18:22:14.287Z",
   "id": "298f3JSOE72nhW59",
   "name": "EL",
@@ -311,15 +311,6 @@
             }
           ]
         },
-        "placeholderDefinitions": {
-          "values": [
-            {
-              "name": "query",
-              "description": "The product or topic to search for demand and market trends in India",
-              "type": "string"
-            }
-          ]
-        },
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
@@ -540,9 +531,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "f98fedc2-c30a-4d77-beab-dfeb92dae88a",
-  "activeVersionId": "f98fedc2-c30a-4d77-beab-dfeb92dae88a",
-  "versionCounter": 63,
+  "versionId": "2e56183f-2f49-42ae-8bf2-014e91c0094f",
+  "activeVersionId": "2e56183f-2f49-42ae-8bf2-014e91c0094f",
+  "versionCounter": 66,
   "triggerCount": 1,
   "shared": [
     {
@@ -565,9 +556,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-04-25T14:22:28.870Z",
-    "createdAt": "2026-04-25T14:22:28.870Z",
-    "versionId": "f98fedc2-c30a-4d77-beab-dfeb92dae88a",
+    "updatedAt": "2026-04-25T14:25:31.656Z",
+    "createdAt": "2026-04-25T14:25:31.656Z",
+    "versionId": "2e56183f-2f49-42ae-8bf2-014e91c0094f",
     "workflowId": "298f3JSOE72nhW59",
     "nodes": [
       {
@@ -874,15 +865,6 @@
               }
             ]
           },
-          "placeholderDefinitions": {
-            "values": [
-              {
-                "name": "query",
-                "description": "The product or topic to search for demand and market trends in India",
-                "type": "string"
-              }
-            ]
-          },
           "options": {}
         },
         "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
@@ -1096,18 +1078,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-04-25T14:22:29.082Z",
-        "id": 33,
+        "createdAt": "2026-04-25T14:25:31.850Z",
+        "id": 35,
         "workflowId": "298f3JSOE72nhW59",
-        "versionId": "f98fedc2-c30a-4d77-beab-dfeb92dae88a",
+        "versionId": "2e56183f-2f49-42ae-8bf2-014e91c0094f",
         "event": "activated",
         "userId": "33330254-40a5-470b-996d-faf8a5b9cb11"
       },
       {
-        "createdAt": "2026-04-25T14:22:28.993Z",
-        "id": 32,
+        "createdAt": "2026-04-25T14:25:31.762Z",
+        "id": 34,
         "workflowId": "298f3JSOE72nhW59",
-        "versionId": "f98fedc2-c30a-4d77-beab-dfeb92dae88a",
+        "versionId": "2e56183f-2f49-42ae-8bf2-014e91c0094f",
         "event": "deactivated",
         "userId": "33330254-40a5-470b-996d-faf8a5b9cb11"
       }
