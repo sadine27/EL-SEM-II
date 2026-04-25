@@ -4,12 +4,20 @@
     {
       "parameters": {
         "rule": {
-          "interval": [{"field": "days", "daysInterval": 1}]
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
         }
       },
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
-      "position": [-600, 0],
+      "position": [
+        -600,
+        0
+      ],
       "id": "a1b2c3d4-0001-0001-0001-000000000001",
       "name": "Every 24 Hours"
     },
@@ -19,10 +27,22 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            {"name": "chart",      "value": "mostPopular"},
-            {"name": "regionCode", "value": "IN"},
-            {"name": "maxResults", "value": "50"},
-            {"name": "part",       "value": "snippet"}
+            {
+              "name": "chart",
+              "value": "mostPopular"
+            },
+            {
+              "name": "regionCode",
+              "value": "IN"
+            },
+            {
+              "name": "maxResults",
+              "value": "50"
+            },
+            {
+              "name": "part",
+              "value": "snippet"
+            }
           ]
         },
         "authentication": "genericCredentialType",
@@ -37,7 +57,10 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-380, 0],
+      "position": [
+        -380,
+        0
+      ],
       "id": "a1b2c3d4-0003-0003-0003-000000000003",
       "name": "YouTube Trending IN"
     },
@@ -47,18 +70,247 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-100, 0],
+      "position": [
+        -100,
+        0
+      ],
       "id": "a1b2c3d4-0002-0002-0002-000000000002",
       "name": "Fetch . Score . Dedupe . Rank"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/1WVIWkLHZkNw4mqUQwnUy0j2k_5eogREcCfPySzRLn2A/batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({requests:[{addSheet:{properties:{title: $now.format('yyyy-MM-dd')}}}]}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cj9iWqqC2UMVE3PQ",
+          "name": "sharma divyesh api"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        -280
+      ],
+      "id": "b2c3d4e5-0001-0001-0001-000000000001",
+      "name": "Create Day Tab"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Fetch . Score . Dedupe . Rank').first().json;\nconst sheetId = $('Create Day Tab').first().json.replies[0].addSheet.properties.sheetId;\n\nconst runDate = (payload.metadata && payload.metadata.scraped_at)\n  ? payload.metadata.scraped_at.substring(0, 10)\n  : new Date().toISOString().substring(0, 10);\n\nconst headerBg = {red:0.102,green:0.451,blue:0.914};\nconst white    = {red:1,green:1,blue:1};\nconst hFmt = {\n  backgroundColor: headerBg,\n  textFormat: {foregroundColor:white,bold:true,fontSize:11},\n  horizontalAlignment:'CENTER', verticalAlignment:'MIDDLE'\n};\n\nconst strCell = v => ({userEnteredValue:{stringValue:String(v??'')}});\nconst numCell = v => ({userEnteredValue:{numberValue:typeof v==='number'?v:parseFloat(v)||0}});\nconst hdrCell = label => ({userEnteredValue:{stringValue:label},userEnteredFormat:hFmt});\n\nconst headers = ['run_date','rank','topic','source','traffic_estimate',\n                 'product_intent_score','related_queries','suggested_categories'];\n\nconst dataRows = payload.trends.map(t=>({values:[\n  strCell(runDate),\n  numCell(t.rank),\n  strCell(t.topic),\n  strCell(t.source),\n  strCell(t.traffic_estimate??'N/A'),\n  numCell(t.product_intent_score),\n  strCell(Array.isArray(t.related_queries)?t.related_queries.join(', '):''),\n  strCell(Array.isArray(t.suggested_categories)?t.suggested_categories.join(', '):'')\n]}));\n\nconst colWidths=[120,60,400,160,120,80,300,200];\nconst dimReqs=colWidths.map((px,i)=>({updateDimensionProperties:{\n  range:{sheetId,dimension:'COLUMNS',startIndex:i,endIndex:i+1},\n  properties:{pixelSize:px},fields:'pixelSize'\n}}));\n\nconst fmtColors=[\n  {red:0.714,green:0.843,blue:0.659},\n  {red:1.0,green:0.949,blue:0.8},\n  {red:0.957,green:0.8,blue:0.8}\n];\nconst formulas=['=$F2>=0.7','=AND($F2>=0.4,$F2<0.7)','=$F2<0.4'];\nconst condReqs=formulas.map((f,idx)=>({addConditionalFormatRule:{\n  rule:{\n    ranges:[{sheetId,startRowIndex:1,startColumnIndex:0,endColumnIndex:8}],\n    booleanRule:{\n      condition:{type:'CUSTOM_FORMULA',values:[{userEnteredValue:f}]},\n      format:{backgroundColor:fmtColors[idx]}\n    }\n  },\n  index:idx\n}}));\n\nconst requests=[\n  {updateCells:{\n    range:{sheetId,startRowIndex:0,endRowIndex:1,startColumnIndex:0,endColumnIndex:8},\n    rows:[{values:headers.map(hdrCell)}],\n    fields:'userEnteredValue,userEnteredFormat'\n  }},\n  {appendCells:{sheetId,rows:dataRows,fields:'userEnteredValue'}},\n  {updateSheetProperties:{\n    properties:{sheetId,gridProperties:{frozenRowCount:1}},\n    fields:'gridProperties.frozenRowCount'\n  }},\n  {updateDimensionProperties:{\n    range:{sheetId,dimension:'ROWS',startIndex:0,endIndex:1},\n    properties:{pixelSize:40},fields:'pixelSize'\n  }},\n  ...dimReqs,\n  ...condReqs\n];\n\nreturn [{json:{requests,sheetId,runDate}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        -280
+      ],
+      "id": "b2c3d4e5-0002-0002-0002-000000000002",
+      "name": "Prepare Sheet Data"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/1WVIWkLHZkNw4mqUQwnUy0j2k_5eogREcCfPySzRLn2A/batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({requests: $json.requests}) }}",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cj9iWqqC2UMVE3PQ",
+          "name": "sharma divyesh api"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        -280
+      ],
+      "id": "b2c3d4e5-0003-0003-0003-000000000003",
+      "name": "Write & Format Sheet"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Fetch . Score . Dedupe . Rank').first().json;\nconst date = new Date().toISOString().substring(0, 10);\nreturn [{json:{\n  filename: `trending_india_${date}.json`,\n  jsonContent: JSON.stringify(payload, null, 2),\n  folderId: '1M0FRJeZ6uguJSfmheWwU8hwiZe_tjVja'\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        280
+      ],
+      "id": "b2c3d4e5-0004-0004-0004-000000000004",
+      "name": "Prepare JSON File"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({name: $json.filename, mimeType: 'application/json', parents: ['1M0FRJeZ6uguJSfmheWwU8hwiZe_tjVja']}) }}",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cj9iWqqC2UMVE3PQ",
+          "name": "sharma divyesh api"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        280
+      ],
+      "id": "b2c3d4e5-0005-0005-0005-000000000005",
+      "name": "Drive Create File"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ `https://www.googleapis.com/upload/drive/v3/files/${$('Drive Create File').first().json.id}?uploadType=media` }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ $('Prepare JSON File').first().json.jsonContent }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cj9iWqqC2UMVE3PQ",
+          "name": "sharma divyesh api"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        280
+      ],
+      "id": "b2c3d4e5-0006-0006-0006-000000000006",
+      "name": "Drive Upload Content"
     }
   ],
   "connections": {
     "Every 24 Hours": {
-      "main": [[{"node": "YouTube Trending IN", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "YouTube Trending IN",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "YouTube Trending IN": {
-      "main": [[{"node": "Fetch . Score . Dedupe . Rank", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Fetch . Score . Dedupe . Rank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch . Score . Dedupe . Rank": {
+      "main": [
+        [
+          {
+            "node": "Create Day Tab",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare JSON File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Day Tab": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sheet Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sheet Data": {
+      "main": [
+        [
+          {
+            "node": "Write & Format Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare JSON File": {
+      "main": [
+        [
+          {
+            "node": "Drive Create File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive Create File": {
+      "main": [
+        [
+          {
+            "node": "Drive Upload Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "settings": {"executionOrder": "v1"}
+  "settings": {
+    "executionOrder": "v1"
+  }
 }
