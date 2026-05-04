@@ -1,0 +1,2992 @@
+{
+  "name": "EL",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1344,
+        -320
+      ],
+      "id": "44fcf024-5281-4abd-ac5c-f9da36a86d7c",
+      "name": "Every 24 Hours"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "chart",
+              "value": "mostPopular"
+            },
+            {
+              "name": "regionCode",
+              "value": "IN"
+            },
+            {
+              "name": "maxResults",
+              "value": "50"
+            },
+            {
+              "name": "part",
+              "value": "snippet"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1056,
+        -320
+      ],
+      "id": "b491ca01-23c4-4e4e-af7e-9c5f42ed85ee",
+      "name": "YouTube Trending IN",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "rutAZsTO756iwAr6",
+          "name": "YouTube API Key"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "let ytItems = [];\ntry {\n  const ytResp = $input.first().json;\n  for (const v of (ytResp.items || [])) {\n    const sn = v.snippet || {};\n    if (sn.title) ytItems.push({ topic: sn.title.trim(), source: 'youtube_trending', tags: sn.tags || [] });\n  }\n} catch(e) { console.log('YouTube parse failed:', e.message); }\n\nlet trendsItems = [];\ntry {\n  const r = await $http.get('https://trends.google.com/trends/trendingsearches/daily/rss?geo=IN');\n  const xml = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);\n  const matches = [...xml.matchAll(/<title>(?:<!\\[CDATA\\[)?([^<\\]]+?)(?:\\]\\]>)?<\\/title>/g)];\n  for (const m of matches.slice(1)) {\n    const t = m[1].trim();\n    if (t) trendsItems.push({ topic: t, source: 'google_trends_daily', tags: [] });\n  }\n} catch(e) { console.log('Trends RSS failed:', e.message); }\n\nlet newsItems = [];\ntry {\n  const r = await $http.get('https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en');\n  const xml = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);\n  const matches = [...xml.matchAll(/<title>(?:<!\\[CDATA\\[)?([^<\\]]+?)(?:\\]\\]>)?<\\/title>/g)];\n  for (const m of matches.slice(1, 101)) {\n    const t = m[1].trim();\n    if (t) newsItems.push({ topic: t, source: 'google_news_rss', tags: [] });\n  }\n} catch(e) { console.log('News RSS failed:', e.message); }\n\nconst T1 = ['buy','price','cheap','best','review','order','shop','deal','discount','sale','offer','coupon','promo code','clearance','cash on delivery','cod','free shipping','emi','in stock','where to buy','lowest price','cheap price','wholesale','bulk','dropship','distributor','under 500','under 1000'];\nconst T2 = ['alternative to','similar to','replacement for','specs','specifications','features','dimensions','unboxing','hands on','teardown','pros and cons','is it worth it','buying guide','top 10','top 5','tier list','ranking','benchmarks','reddit','quora','combo','kit','pack','vs','comparison'];\nconst T3 = ['wireless','portable','new','latest','trending','india 2026','original','authentic','genuine','fake vs real','refurbished','second hand','used','open box','warranty','return policy','customer service','size chart','colors','variants','edition','flash sale','limited time','lightning deal','restock','sold out','in stock tracker','pre-order','launch date','release date','early access','near me'];\nconst NEG = ['how to','tutorial','diy','repair','fix','not working','error','broken','manual','pdf','driver download','free download'];\nconst CAT = {\n  electronics: ['wireless','bluetooth','earbuds','phone','laptop','usb','charger','led','power bank','smartwatch','speaker','monitor','cable','adapter','tablet','camera'],\n  fashion: ['shirt','dress','kurta','saree','sneakers','watch','bag','sunglasses','jeans','t-shirt','jacket','shoes','hoodie','heels','wallet','belt'],\n  home: ['kitchen','decor','organizer','cleaning','storage','fan','cooler','light','bottle','bedsheet','pillow','cookware','blender','mop','towel','vacuum'],\n  fitness: ['gym','yoga','protein','supplement','band','tracker','cycle','dumbbells','mat','creatine','whey','treadmill','resistance','shaker','massager'],\n  beauty: ['skincare','hair','serum','moisturizer','lipstick','foundation','sunscreen','shampoo','perfume','lotion','concealer','trimmer','face wash','makeup','cleanser'],\n  accessories: ['case','cover','stand','holder','mount','strap','tempered glass','sleeve','skin','guard','ring','tripod','grip','hub'],\n  automotive: ['car','bike','helmet','dashcam','tyre','wax','polish','wiper','gps','inflator','mat','coolant','scratch','jump starter','perfume'],\n  baby_and_kids: ['toy','puzzle','lego','diaper','stroller','wipes','pacifier','onesie','rattle','plush','scooter','doll','action figure','bottle'],\n  pets: ['dog','cat','food','collar','leash','bed','litter','treats','aquarium','grooming','cage','harness','shampoo','bowl'],\n  office_and_stationery: ['book','notebook','pen','desk','chair','printer','paper','marker','folder','diary','planner','stapler','calculator','ink'],\n  health_and_medical: ['thermometer','massager','vitamins','mask','sanitizer','first aid','scale','oximeter','braces','monitor','inhaler','test kit','support'],\n  tools_and_hardware: ['drill','screwdriver','wrench','saw','tape','hammer','screws','pliers','multimeter','ladder','glue','toolkit','nails','hinge'],\n  grocery_and_food: ['coffee','tea','snacks','chocolate','dry fruits','oil','rice','spices','honey','noodles','sauce','cereal','pasta','biscuit']\n};\nconst STOP = new Set(['a','an','the','in','of','for','with','is','are','was','were','and','or','on','at','to','by','from']);\n\nfunction scoreIntent(topic, related) {\n  const h = [topic, ...related].join(' ').toLowerCase();\n  let s = 0;\n  T1.forEach(p => { if (h.includes(p)) s += 0.30; });\n  T2.forEach(p => { if (h.includes(p)) s += 0.15; });\n  T3.forEach(p => { if (h.includes(p)) s += 0.10; });\n  NEG.forEach(p => { if (h.includes(p)) s -= 0.20; });\n  return Math.round(Math.max(0, Math.min(1, s)) * 1000) / 1000;\n}\n\nfunction mapCats(topic, related) {\n  const h = [topic, ...related].join(' ').toLowerCase();\n  const m = [];\n  for (const [c, kws] of Object.entries(CAT)) {\n    for (const kw of kws) {\n      if (new RegExp('\\\\b' + kw.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&') + '\\\\b').test(h)) { m.push(c); break; }\n    }\n  }\n  return m.length ? m : ['uncategorized'];\n}\n\nfunction normWords(t) {\n  return new Set(t.toLowerCase().replace(/[^\\w\\s]/g,' ').split(/\\s+/).filter(w => w && !STOP.has(w)));\n}\n\nfunction dedupe(items) {\n  const kept = [];\n  for (const c of items) {\n    const cw = normWords(c.topic);\n    if (!cw.size) continue;\n    let di = -1;\n    for (let i = 0; i < kept.length; i++) {\n      const ew = normWords(kept[i].topic);\n      const ov = [...cw].filter(w => ew.has(w)).length;\n      const smaller = Math.min(cw.size, ew.size);\n      if (smaller && ov / smaller > 0.70) { di = i; break; }\n    }\n    if (di === -1) kept.push(c);\n    else if ((c.related_queries||[]).length > (kept[di].related_queries||[]).length) kept[di] = c;\n  }\n  return kept;\n}\n\nconst raw = [...ytItems, ...trendsItems, ...newsItems].slice(0, 1000);\nconst enriched = raw.map(item => {\n  const related = item.tags.slice(0, 10);\n  return {\n    topic: item.topic,\n    traffic_estimate: 'N/A',\n    source: item.source,\n    related_queries: related,\n    product_intent_score: scoreIntent(item.topic, related),\n    suggested_categories: mapCats(item.topic, related)\n  };\n});\nconst deduped = dedupe(enriched);\ndeduped.sort((a, b) => b.product_intent_score - a.product_intent_score);\nconst ranked = deduped.map((t, i) => ({ rank: i + 1, ...t }));\n\nconst payload = {\n  metadata: {\n    scraped_at: new Date().toISOString(),\n    geo: 'IN',\n    total_topics: ranked.length,\n    sources: ['google_trends_daily', 'youtube_trending', 'google_news_rss']\n  },\n  trends: ranked\n};\n\nconsole.log(`Done: ${ranked.length} topics | YT:${ytItems.length} Trends:${trendsItems.length} News:${newsItems.length}`);\nreturn [{ json: payload }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -784,
+        -320
+      ],
+      "id": "70c1bcc6-613e-472f-9150-92a2ce4f5c6f",
+      "name": "Fetch . Score . Dedupe . Rank",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": {
+          "__rl": true,
+          "value": "1WVIWkLHZkNw4mqUQwnUy0j2k_5eogREcCfPySzRLn2A",
+          "mode": "id"
+        },
+        "title": "={{ $now.format('yyyy-MM-dd') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        -272,
+        -400
+      ],
+      "id": "b2c3d4e5-0001-0001-0001-000000000001",
+      "name": "Create Day Tab",
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cj9iWqqC2UMVE3PQ",
+          "name": "sharma divyesh api"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Fetch . Score . Dedupe . Rank').first().json;\nconst runDate = payload.metadata?.scraped_at?.substring(0, 10) ?? new Date().toISOString().substring(0, 10);\n\nreturn payload.trends.map(t => ({ json: {\n  run_date: runDate,\n  rank: t.rank,\n  topic: t.topic,\n  source: t.source,\n  traffic_estimate: t.traffic_estimate ?? 'N/A',\n  product_intent_score: t.product_intent_score,\n  related_queries: (t.related_queries || []).join(', '),\n  suggested_categories: (t.suggested_categories || []).join(', ')\n}}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        -400
+      ],
+      "id": "b2c3d4e5-0002-0002-0002-000000000002",
+      "name": "Prepare Sheet Rows",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1WVIWkLHZkNw4mqUQwnUy0j2k_5eogREcCfPySzRLn2A",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $now.format('yyyy-MM-dd') }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        288,
+        -400
+      ],
+      "id": "b2c3d4e5-0003-0003-0003-000000000003",
+      "name": "Write Rows to Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cj9iWqqC2UMVE3PQ",
+          "name": "sharma divyesh api"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Fetch . Score . Dedupe . Rank').first().json;\nconst date = new Date().toISOString().substring(0, 10);\nconst filename = `trending_india_${date}.json`;\nconst content = JSON.stringify(payload, null, 2);\nconst base64 = Buffer.from(content, 'utf-8').toString('base64');\nreturn [{\n  json: { filename },\n  binary: {\n    data: {\n      data: base64,\n      mimeType: 'application/json',\n      fileName: filename,\n      fileExtension: 'json'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        -192
+      ],
+      "id": "b2c3d4e5-0004-0004-0004-000000000004",
+      "name": "Prepare JSON File",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "name": "={{ $json.filename }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1M0FRJeZ6uguJSfmheWwU8hwiZe_tjVja",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        16,
+        -192
+      ],
+      "id": "b2c3d4e5-0005-0005-0005-000000000005",
+      "name": "Drive Upload",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "0oLO30UGKkjntX2S",
+          "name": "sharma divyesh"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst top30 = payload.trends.slice(0, 30);\nconst run_date = payload.metadata?.scraped_at?.substring(0, 10) ?? new Date().toISOString().substring(0, 10);\nconst topics_text = top30.map(t =>\n  `${t.rank}. \"${t.topic}\" | intent:${t.product_intent_score} | cats:${(t.suggested_categories||[]).join(',')} | src:${t.source}`\n).join('\\n');\nreturn [{ json: { topics_text, run_date, total: top30.length } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        208
+      ],
+      "id": "p2-0001-0001-0001-000000000001",
+      "name": "Filter Top 30",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.topics_text }}",
+        "options": {
+          "systemMessage": "You are a dropshipping product curator for the Indian market. Today's date is {{ $now.format('yyyy-MM-dd') }}.\n\nYou receive a numbered list of trending topics in India with product intent scores (0.0-1.0 scale). Your task: select the TOP 10 best dropshipping opportunities from the list.\n\nProcess:\n1. Review all topics and their intent scores carefully.\n2. Use web_search to verify current demand, pricing and competition for your top candidates (search 3-5 topics).\n3. Check your memory - if a topic was a strong pick in a previous run and is still trending, keep it unless clearly beaten.\n4. For each pick, write `search_query_in`: a SHORT (3-7 word) product search a real Indian buyer would type into Amazon.in / Flipkart / Meesho. It MUST contain a concrete product noun. Examples: \"ranveer singh dhurandhar t-shirt\", \"valentine day gift hamper\", \"iphone 17 pro case\", \"ipl jersey csk\", \"kumkumadi face oil\". Avoid vague phrases like \"merchandise\" or \"themed accessories\".\n5. Return ONLY a valid JSON array - no markdown code fences, no explanation, nothing else:\n[{\"rank\":1,\"topic\":\"...\",\"opportunity_score\":8.5,\"reason\":\"...\",\"suggested_product_type\":\"...\",\"target_audience\":\"...\",\"search_query_in\":\"...\"}]"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        0,
+        176
+      ],
+      "id": "p2-0002-0002-0002-000000000002",
+      "name": "Dropship AI Agent",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "gemini-2.5-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        464
+      ],
+      "id": "p2-0003-0003-0003-000000000003",
+      "name": "Gemini Flash",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Cvq1f78PBbOpwimZ",
+          "name": "Gemini API Key (EL pipeline)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "dropshipping_india_agent",
+        "tableName": "n8n_dropship_memory",
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        96,
+        480
+      ],
+      "id": "p2-0004-0004-0004-000000000004",
+      "name": "Postgres Memory",
+      "credentials": {
+        "postgres": {
+          "id": "Tx3i0fewZ8MM6LFt",
+          "name": "Supabase yatralounge (Dropship Memory)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "web_search",
+        "description": "Search the web for current product demand, pricing, competition and market trends in India. Input: the search query string.",
+        "jsCode": "const inp = $input.first().json;\nconst query = String(inp.query ?? inp.input ?? inp.text ?? '');\nif (!query) return 'No query provided';\n\nconst res = await fetch('https://api.tavily.com/search', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    api_key: 'REDACTED_TAVILY_KEY',\n    query: query,\n    max_results: 5,\n    include_answer: true,\n    search_depth: 'basic'\n  })\n});\nconst d = await res.json();\nconst answer = d.answer || '';\nconst results = (d.results || []).slice(0, 5)\n  .map(r => `- ${r.title}: ${(r.snippet || r.content || '').substring(0, 200)}`)\n  .join('\\n');\nreturn answer ? `${answer}\\n\\nSources:\\n${results}` : results || 'No results found';"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [
+        304,
+        480
+      ],
+      "id": "p2-0005-0005-0005-000000000005",
+      "name": "Tavily Search"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json.output ?? '';\nconst run_date = $('Filter Top 30').first().json.run_date;\nlet picks = [];\ntry {\n  const match = output.match(/\\[[\\s\\S]*\\]/);\n  if (match) picks = JSON.parse(match[0]);\n} catch(e) { console.log('JSON parse error:', e.message); }\nreturn picks.length\n  ? picks.map(p => ({ json: { run_date, ...p } }))\n  : [{ json: { run_date, error: 'No picks parsed', raw: output.substring(0, 500) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        208
+      ],
+      "id": "p2-0006-0006-0006-000000000006",
+      "name": "Parse Agent Output",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1WVIWkLHZkNw4mqUQwnUy0j2k_5eogREcCfPySzRLn2A",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Curated Picks",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "run_date",
+              "displayName": "run_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "rank",
+              "displayName": "rank",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "opportunity_score",
+              "displayName": "opportunity_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "suggested_product_type",
+              "displayName": "suggested_product_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "target_audience",
+              "displayName": "target_audience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "search_query_in",
+              "displayName": "search_query_in",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        752,
+        384
+      ],
+      "id": "p2-0007-0007-0007-000000000007",
+      "name": "Write Curated Picks",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cj9iWqqC2UMVE3PQ",
+          "name": "sharma divyesh api"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": {
+          "__rl": true,
+          "value": "1WVIWkLHZkNw4mqUQwnUy0j2k_5eogREcCfPySzRLn2A",
+          "mode": "id"
+        },
+        "title": "Curated Picks",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        -544,
+        480
+      ],
+      "id": "p2-0008-0008-0008-000000000008",
+      "name": "Create Curated Picks Tab",
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cj9iWqqC2UMVE3PQ",
+          "name": "sharma divyesh api"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/authentication/getAccessToken",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"email\": \"sharmadivyesh20070727@gmail.com\", \"apiKey\": \"CJ5360638@api@b63121bcc5b24f9293703b37401ce547\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        848,
+        -368
+      ],
+      "id": "p3-c0-token-0001-000000000001",
+      "name": "CJ Get Token",
+      "executeOnce": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Convert a curated AI pick into a CJ keyword search.\n// Phase 2 v2: prefer the new `search_query_in` field (sharper India-market query)\n// before falling back to the old parenthetical-extraction heuristic.\nconst FILLER = /\\b(merchandise|themed|product|products|specific|official|fan[- ]?made|gaming|movie|music|artist|web|series|character|celebrity|focused|collectible|collectibles|accessories|apparel|cultural|items|memorabilia|regional|song|songs|romantic|symbol|symbols|new|latest)\\b/g;\nconst items = $input.all();\nconst out = [];\nfor (const it of items) {\n  const j = it.json || {};\n  if (j.error) continue;\n\n  // 1. Prefer the new search_query_in field if present\n  let cleaned = '';\n  if (j.search_query_in && String(j.search_query_in).trim()) {\n    cleaned = String(j.search_query_in).toLowerCase()\n      .replace(/[^a-z0-9\\s\\-]+/g, ' ')\n      .replace(/\\s+/g, ' ').trim()\n      .split(' ').filter(w => w.length > 1).slice(0, 6).join(' ');\n  }\n  // 2. Fallback to legacy heuristic on suggested_product_type / topic\n  if (!cleaned) {\n    let raw = String(j.suggested_product_type || j.topic || '');\n    const paren = raw.match(/\\(([^)]+)\\)/);\n    if (paren) raw = paren[1];\n    cleaned = raw.toLowerCase()\n      .replace(/[^a-z0-9\\s\\-,]+/g, ' ')\n      .replace(/[,\\-]+/g, ' ')\n      .replace(/\\s+/g, ' ')\n      .replace(FILLER, ' ')\n      .replace(/\\s+/g, ' ')\n      .trim();\n    cleaned = cleaned.split(' ').filter(w => w.length > 2).slice(0, 3).join(' ');\n  }\n  if (!cleaned) {\n    cleaned = String(j.topic || '').toLowerCase()\n      .replace(/[^a-z0-9\\s]+/g, ' ').replace(/\\s+/g, ' ').trim()\n      .split(' ').slice(0, 3).join(' ');\n  }\n  if (!cleaned) continue;\n\n  out.push({ json: {\n    keyword: cleaned,\n    source_topic: j.topic || cleaned,\n    source_pick_rank: j.rank ?? null,\n    opportunity_score: j.opportunity_score ?? null,\n    run_date: j.run_date || new Date().toISOString().substring(0,10),\n  }});\n}\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        -192
+      ],
+      "id": "p3-c1-buildq-0001-000000000002",
+      "name": "Build Search Query",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/product/list",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "pageNum",
+              "value": "1"
+            },
+            {
+              "name": "pageSize",
+              "value": "20"
+            },
+            {
+              "name": "keyWord",
+              "value": "={{ $json.keyword }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $('CJ Get Token').first().json.data.accessToken }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        -256
+      ],
+      "id": "p3-c2-cjlist-0001-000000000003",
+      "name": "CJ Product List",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Filter CJ list, sort by listedNum, keep top 3 best matches.\n// Input: each item has .json.data.list[] from CJ API + passthrough metadata via $('Build Search Query')\nconst items = $input.all();\nconst out = [];\n\nfunction parsePrice(s) {\n  if (!s) return null;\n  const nums = String(s).match(/[\\d.]+/g);\n  if (!nums || !nums.length) return null;\n  // CJ returns ranges like \"2.02 -- 14.10\"; take the lower bound\n  return parseFloat(nums[0]);\n}\n\nfor (let i = 0; i < items.length; i++) {\n  const it = items[i].json || {};\n  const meta = $('Build Search Query').all()[i]?.json || {};\n  const list = it?.data?.list || [];\n  const kwTokens = String(meta.keyword || '').split(/\\s+/).filter(w => w.length > 2);\n\n  // Prefer items whose English name shares at least 1 token with the keyword,\n  // but if the strict filter yields fewer than 3 we top up with the rest of the list.\n  const strict = list.filter(p => {\n    const name = String(p.productNameEn || p.productName || '').toLowerCase();\n    return kwTokens.some(t => name.includes(t));\n  });\n  strict.sort((a,b) => (b.listedNum||0) - (a.listedNum||0));\n  let top = strict.slice(0, 3);\n  if (top.length < 3) {\n    const seen = new Set(top.map(p => p.pid));\n    const rest = list.filter(p => !seen.has(p.pid)).sort((a,b) => (b.listedNum||0) - (a.listedNum||0));\n    top = top.concat(rest.slice(0, 3 - top.length));\n  }\n\n  for (const p of top) {\n    const imgs = String(p.productImage || '').split(';').filter(Boolean);\n    out.push({ json: {\n      run_date: meta.run_date,\n      source_topic: meta.source_topic,\n      source_pick_rank: meta.source_pick_rank,\n      opportunity_score: meta.opportunity_score,\n      source_provider: 'cj_dropshipping',\n      product_name: p.productNameEn || p.productName || null,\n      product_url: `https://app.cjdropshipping.com/product/${p.pid}.html`,\n      product_sku: p.productSku || null,\n      price_text: String(p.sellPrice || ''),\n      price_numeric: parsePrice(p.sellPrice),\n      currency: 'USD',\n      description: '',\n      image_urls: JSON.stringify(imgs),\n      offers: JSON.stringify([{\n        listedNum: p.listedNum || 0,\n        supplierName: p.supplierName || null,\n        isFreeShipping: !!p.isFreeShipping,\n        shippingCountryCodes: p.shippingCountryCodes || null,\n        categoryName: p.categoryName || null,\n      }]),\n      raw_payload: JSON.stringify(p),\n      scraped_at: new Date().toISOString(),\n    }});\n  }\n}\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        -224
+      ],
+      "id": "p3-c3-top3-0001-000000000004",
+      "name": "Pick Top 3",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": {
+          "__rl": true,
+          "value": "1lLmPtyewS6SoCsgO4hwu9qOz1eUh_gVMEYuFa-IiieQ",
+          "mode": "id"
+        },
+        "title": "={{ $now.format('yyyy-MM-dd') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        2096,
+        -496
+      ],
+      "id": "p3-d1a-tab-0001-000000000009",
+      "name": "Create Day Tab (Scraped)",
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cj9iWqqC2UMVE3PQ",
+          "name": "sharma divyesh api"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Reformat Pick Top 3 items into flat human-readable rows for Google Sheets.\n// JSON-stringified fields (image_urls, offers, raw_payload) are unpacked and joined.\nconst items = $('Pick Top 3').all();\nconst out = [];\nfor (const it of items) {\n  const j = it.json || {};\n  let imgs = [];\n  let offers = [];\n  try { imgs = JSON.parse(j.image_urls || '[]'); } catch(e) {}\n  try { offers = JSON.parse(j.offers || '[]'); } catch(e) {}\n  const offer = offers[0] || {};\n  out.push({ json: {\n    run_date: j.run_date,\n    source_pick_rank: j.source_pick_rank,\n    opportunity_score: j.opportunity_score,\n    source_topic: j.source_topic,\n    source_provider: j.source_provider,\n    product_name: j.product_name,\n    product_url: j.product_url,\n    product_sku: j.product_sku,\n    price_text: j.price_text,\n    price_numeric: j.price_numeric,\n    currency: j.currency,\n    image_urls: imgs.join(', '),\n    image_count: imgs.length,\n    listed_num: offer.listedNum ?? '',\n    supplier: offer.supplierName ?? '',\n    free_shipping: offer.isFreeShipping ? 'YES' : 'no',\n    shipping_countries: offer.shippingCountryCodes ?? '',\n    category: offer.categoryName ?? '',\n    scraped_at: j.scraped_at,\n  }});\n}\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2096,
+        -320
+      ],
+      "id": "p3-d1b-prep-0001-000000000010",
+      "name": "Prepare Sheet Rows (Scraped)",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1lLmPtyewS6SoCsgO4hwu9qOz1eUh_gVMEYuFa-IiieQ",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $now.format('yyyy-MM-dd') }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        2384,
+        -320
+      ],
+      "id": "p3-d1-sheet-0001-000000000005",
+      "name": "Sheet Append (Scraped)",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "cj9iWqqC2UMVE3PQ",
+          "name": "sharma divyesh api"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Aggregate all scraped products into a single JSON file (binary attachment).\nconst all = $input.all().map(i => i.json);\nconst run_date = all[0]?.run_date || new Date().toISOString().substring(0,10);\nconst payload = {\n  metadata: {\n    run_date,\n    total_products: all.length,\n    scraped_at: new Date().toISOString(),\n    source_providers: [...new Set(all.map(p => p.source_provider).filter(Boolean))],\n  },\n  products: all,\n};\nconst filename = `scraped_products_${run_date}.json`;\nconst content = JSON.stringify(payload, null, 2);\nconst base64 = Buffer.from(content, 'utf-8').toString('base64');\nreturn [{\n  json: { filename, total: all.length },\n  binary: { data: { data: base64, mimeType: 'application/json', fileName: filename, fileExtension: 'json' } }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2096,
+        -160
+      ],
+      "id": "p3-d2a-bundle-0001-000000000006",
+      "name": "Bundle JSON (Scraped)",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "name": "={{ $json.filename }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1jihlrDk1iKxGO7v4VChrEhPphaBPfvhx",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2384,
+        -160
+      ],
+      "id": "p3-d2b-drive-0001-000000000007",
+      "name": "Drive Upload (Scraped)",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "0oLO30UGKkjntX2S",
+          "name": "sharma divyesh"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "scraped_products",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "product_url",
+            "source_topic"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "run_date",
+              "displayName": "run_date",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "source_topic",
+              "displayName": "source_topic",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_pick_rank",
+              "displayName": "source_pick_rank",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "opportunity_score",
+              "displayName": "opportunity_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "source_provider",
+              "displayName": "source_provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "product_name",
+              "displayName": "product_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "product_url",
+              "displayName": "product_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "product_sku",
+              "displayName": "product_sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "price_text",
+              "displayName": "price_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "price_numeric",
+              "displayName": "price_numeric",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "image_urls",
+              "displayName": "image_urls",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "offers",
+              "displayName": "offers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "raw_payload",
+              "displayName": "raw_payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "scraped_at",
+              "displayName": "scraped_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2096,
+        16
+      ],
+      "id": "p3-d3-pg-0001-000000000008",
+      "name": "Supabase Insert (Scraped)",
+      "credentials": {
+        "postgres": {
+          "id": "Tx3i0fewZ8MM6LFt",
+          "name": "Supabase yatralounge (Dropship Memory)"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const inp = $input.first().json;\nconst err = inp.error || inp;\nconst nodeName = err?.node?.name || err?.context?.nodeName || 'Unknown Node';\nconst msg = (err?.message || err?.description || JSON.stringify(err)).substring(0, 300);\nconst ts = new Date().toLocaleString('en-IN', {timeZone: 'Asia/Kolkata'});\nconst execId = $execution?.id || 'N/A';\nconst url = `https://divyesh-sharma.app.n8n.cloud/workflow/298f3JSOE72nhW59/executions/${execId}`;\nconst text = `?? *EL Node Failed*\\n\\n? *Node:* \\`${nodeName}\\`\\n?? *Error:* ${msg}\\n?? *Time (IST):* ${ts}\\n?? [View Execution](${url})`;\nreturn [{json:{text}}];"
+      },
+      "id": "err-fmt-el-0001",
+      "name": "Error Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "8243518279",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "err-tg-el-0001",
+      "name": "Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1040,
+        176
+      ],
+      "webhookId": "f6fa41b3-3628-40c2-b49c-473457f8db61",
+      "credentials": {
+        "telegramApi": {
+          "id": "tYvc8FQNBsrDMAYj",
+          "name": "EL-DEVELOPER-ALERT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Phase 1 - Trends Fetch\n\nSchedule Trigger ? YouTube + Trends + News RSS ? score / dedupe / rank.\nOutput flows down to Phase 2 (Filter Top 30) and across to storage.",
+        "height": 284,
+        "width": 750,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1392,
+        -432
+      ],
+      "id": "sticky-p1fetch-0001-000000000001",
+      "name": "cluster:phase1-fetch"
+    },
+    {
+      "parameters": {
+        "content": "## Phase 1 - Sheet + Drive Storage\n\n**Sheet** Create Day Tab (executeOnce) ? Prepare Sheet Rows ? Write Rows.\n**Drive** Prepare JSON File ? Drive Upload (daily JSON archive).",
+        "height": 560,
+        "width": 800,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        -576
+      ],
+      "id": "sticky-p1stor-0001-000000000002",
+      "name": "cluster:phase1-storage"
+    },
+    {
+      "parameters": {
+        "content": "## Phase 2 - AI Curator\n\nFilter Top 30 ? Dropship AI Agent (Gemini Flash + Postgres Memory + Tavily web_search tool).\nParse Agent Output extracts the JSON array; spreads ALL fields downstream (including the new `search_query_in` field for Phase 3 query construction).",
+        "height": 700,
+        "width": 1692,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        32
+      ],
+      "id": "sticky-p2agent-0001-000000000003",
+      "name": "cluster:phase2-ai-curator"
+    },
+    {
+      "parameters": {
+        "content": "## Phase 3a - Supplier (CJ Dropshipping) - secondary\n\nCJ Get Token (executeOnce) + Build Search Query (uses `search_query_in` first) ? CJ Product List (1 QPS batched) ? Pick Top 3.\nOutput ? Merge Sources.",
+        "height": 528,
+        "width": 844
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -528
+      ],
+      "id": "sticky-p3acj-0001-000000000004",
+      "name": "cluster:phase3a-cj-supplier"
+    },
+    {
+      "parameters": {
+        "content": "## Phase 3c - Storage Fan-out\n\nMerge Sources collects CJ + Tavily rows.\n**Sheet** Day Tab (executeOnce) + Prepare Rows ? Sheet Append.\n**Drive** Bundle JSON ? Drive Upload.\n**DB** Supabase Insert (upsert on product_url+source_topic).",
+        "height": 956,
+        "width": 1112,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1744,
+        -688
+      ],
+      "id": "sticky-p3cstor-0001-000000000005",
+      "name": "cluster:phase3c-storage"
+    },
+    {
+      "parameters": {
+        "content": "## Error Handling\n\nPer-node onError=continueErrorOutput ? main/1 ? Error Formatter ? Telegram Alert.\nExternal EL Error Handler workflow wired via settings.errorWorkflow.",
+        "height": 348,
+        "width": 592
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1456,
+        16
+      ],
+      "id": "sticky-errhdl-0001-000000000006",
+      "name": "cluster:error-handling"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2016,
+        1216
+      ],
+      "id": "p3v2-merge-0001-000000000008",
+      "name": "Merge Sources"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst PRODUCT_TERMS = [\n  'phone case',\n  't shirt',\n  'hoodie',\n  'poster',\n  'mug',\n  'keychain',\n  'action figure',\n  'building blocks',\n  'toy',\n  'plush',\n  'figurine',\n  'sticker',\n  'cover',\n  'shirt',\n  'case',\n  'cap',\n];\nconst MERCH_TERMS = new Set(['t shirt', 'hoodie', 'poster', 'mug', 'keychain', 'sticker', 'shirt', 'case', 'cover', 'cap']);\n\nfunction compact(value) {\n  return String(value || '').replace(/\\s+/g, ' ').trim();\n}\n\nfunction normalize(value) {\n  return compact(value).toLowerCase().replace(/[^a-z0-9\\s]+/g, ' ').replace(/\\s+/g, ' ').trim();\n}\n\nfunction cleanEntity(raw) {\n  let text = compact(raw);\n  if (!text) return '';\n  text = text.split('|')[0];\n  text = text\n    .replace(/#\\S+/g, ' ')\n    .replace(/\\b(official|video|song|trailer|teaser|live|lyrics|audio|full|viral|new)\\b/ig, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n  if (text.length > 80) text = text.split(' ').slice(0, 8).join(' ');\n  return compact(text);\n}\n\nfunction detectProductTerm(query, suggestedType) {\n  const hay = normalize([query, suggestedType].filter(Boolean).join(' '));\n  for (const term of PRODUCT_TERMS) {\n    if (hay.includes(normalize(term))) return term;\n  }\n  const queryWords = normalize(query).split(' ').filter(Boolean);\n  if (queryWords.length >= 2) return queryWords.slice(-2).join(' ');\n  if (queryWords.length === 1) return queryWords[0];\n  const typeWords = normalize(suggestedType).split(' ').filter(Boolean);\n  return typeWords.slice(0, 2).join(' ');\n}\n\nfunction looksMerchTopic(topic, query, productTerm) {\n  const text = [topic, query, productTerm].filter(Boolean).join(' ');\n  return /(series|movie|trailer|song|music|video|bgmi|minecraft|marvel|wolverine|sidhu|amrit|kalabhavan|teaser)/i.test(text);\n}\n\nconst items = $input.all();\nconst out = [];\nfor (const it of items) {\n  const j = it.json || {};\n  if (j.error) continue;\n\n  const searchQuery = compact(j.search_query_in || '');\n  const entity = cleanEntity(j.topic || searchQuery);\n  let productTerm = detectProductTerm(searchQuery, j.suggested_product_type || '');\n  const merchIntent = looksMerchTopic(j.topic || '', searchQuery, productTerm);\n  if (!productTerm && merchIntent) productTerm = 't shirt';\n  let keyword = compact(searchQuery || [entity, productTerm].filter(Boolean).join(' '));\n  if (!keyword) keyword = compact(j.topic || '');\n  keyword = keyword.slice(0, 120);\n  if (!keyword) continue;\n\n  let tavilyQuery = 'buy ' + keyword + ' india';\n  if (entity && productTerm) {\n    if (merchIntent || MERCH_TERMS.has(productTerm)) {\n      tavilyQuery = 'buy \"' + entity + '\" merchandise ' + productTerm + ' india';\n    } else {\n      tavilyQuery = 'buy \"' + entity + '\" ' + productTerm + ' india';\n    }\n  } else if (searchQuery) {\n    tavilyQuery = 'buy ' + searchQuery + ' india';\n  }\n\n  out.push({ json: {\n    keyword,\n    tavily_query: compact(tavilyQuery).slice(0, 180),\n    entity_hint: entity || null,\n    product_hint: productTerm || null,\n    intent_mode: merchIntent || MERCH_TERMS.has(productTerm) ? 'merch' : 'direct_product',\n    source_topic: j.topic || keyword,\n    source_pick_rank: j.rank ?? null,\n    opportunity_score: j.opportunity_score ?? null,\n    run_date: j.run_date || new Date().toISOString().substring(0, 10),\n    suggested_product_type: j.suggested_product_type || null,\n    target_audience: j.target_audience || null,\n  }});\n}\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        640
+      ],
+      "id": "p3hil-btq-0001",
+      "name": "Build Tavily Query",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.tavily.com/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.tavily_query || $json.keyword, search_depth: 'advanced', max_results: 8, include_raw_content: true, include_domains: [\"amazon.in\", \"flipkart.com\", \"meesho.com\", \"myntra.com\", \"ajio.com\", \"nykaa.com\", \"purplle.com\", \"tatacliq.com\", \"snapdeal.com\", \"firstcry.com\", \"pepperfry.com\", \"urbanladder.com\", \"croma.com\", \"reliancedigital.in\", \"decathlon.in\", \"alibaba.com\"] }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 800
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1584,
+        640
+      ],
+      "id": "p3hil-tav-0001",
+      "name": "Tavily Search (IN Market)",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1W4trh2dkUei7Iet",
+          "name": "Tavily API (EL Phase 3)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst STOP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'your', 'into', 'online', 'india', 'buy']);\nconst MERCH_PRODUCT_TERMS = new Set(['t shirt', 'hoodie', 'poster', 'mug', 'keychain', 'sticker', 'shirt', 'case', 'cover', 'cap']);\nconst PRODUCT_ALIASES = {\n  't shirt': ['t shirt', 'tshirt', 'shirt', 'tee', 'hoodie'],\n  'hoodie': ['hoodie', 'sweatshirt'],\n  'poster': ['poster', 'wall poster'],\n  'mug': ['mug', 'cup'],\n  'keychain': ['keychain', 'key chain'],\n  'sticker': ['sticker'],\n  'phone case': ['phone case', 'case', 'cover'],\n  'action figure': ['action figure', 'figurine', 'collectible', 'toy'],\n  'building blocks': ['building blocks', 'blocks', 'brick', 'bricks', 'lego'],\n};\n\nfunction compact(value) {\n  return String(value || '').replace(/\\s+/g, ' ').trim();\n}\n\nfunction normalizeText(value) {\n  return compact(value).toLowerCase().replace(/[^a-z0-9\\s]+/g, ' ').replace(/\\s+/g, ' ').trim();\n}\n\nfunction tokenize(value) {\n  return normalizeText(value).split(' ').filter(word => word.length > 2 && !STOP.has(word));\n}\n\nfunction urlLooksBad(url) {\n  const value = String(url || '').toLowerCase();\n  return /[?&](k|q|keyword|search)=/.test(value)\n    || /\\/s(\\?|\\/|$)/.test(value)\n    || /(showroom|wholesale|collections?|category|categories|browse|results|product-insights|unboxed|blog|blogs|article|articles)/.test(value);\n}\n\nfunction urlLooksProduct(url) {\n  const value = String(url || '').toLowerCase();\n  return /(\\/dp\\/|\\/gp\\/product\\/|\\/product\\/|\\/products\\/|\\/item\\/|\\/offer\\/|\\/p\\/)/.test(value)\n    || /\\/b0[a-z0-9]{8,}/.test(value);\n}\n\nfunction overlapCount(text, tokens) {\n  return tokens.reduce((count, token) => count + (text.includes(token) ? 1 : 0), 0);\n}\n\nfunction productMatchCount(text, productHint) {\n  const aliases = PRODUCT_ALIASES[productHint] || (productHint ? [productHint] : []);\n  const normalized = normalizeText(text);\n  return aliases.reduce((count, alias) => count + (normalized.includes(normalizeText(alias)) ? 1 : 0), 0);\n}\n\nfunction isBookLike(text) {\n  return /\\b(book|books|novel|novels|paperback|hardcover|kindle|author|authors)\\b/i.test(text);\n}\n\nfunction qualityScore(result, meta) {\n  const url = String(result.url || '');\n  const title = compact(result.title || '');\n  const raw = compact(result.raw_content || result.content || '');\n  const text = normalizeText(title + ' ' + raw);\n  const productTokens = tokenize(meta.product_hint || meta.keyword || '');\n  const entityTokens = tokenize(meta.entity_hint || '');\n  const merchIntent = meta.intent_mode === 'merch' || /(merchandise|t shirt|hoodie|poster|mug|keychain|case|shirt|cover|cap)/i.test(meta.tavily_query || meta.keyword || '');\n  const productMatches = productMatchCount(title + ' ' + raw, meta.product_hint || '');\n  const entityMatches = overlapCount(text, entityTokens);\n\n  let score = Number(result.score || 0) * 10;\n  if (urlLooksProduct(url)) score += 4;\n  if (/(?:rs\\.?|inr|\\u20b9)\\s*\\d/i.test(raw)) score += 2;\n  if (/\\b\\d(?:\\.\\d)?\\s*(?:out of 5|\\/5|stars?)\\b/i.test(raw)) score += 1.5;\n  if (/ratings?|reviews?/i.test(raw)) score += 1.2;\n  score += overlapCount(text, productTokens) * 1.8;\n  score += entityMatches * 1.4;\n  score += productMatches * 2.4;\n  if (meta.entity_hint && text.includes(normalizeText(meta.entity_hint))) score += 2;\n  if (merchIntent && productMatches === 0) score -= 10;\n  if (merchIntent && entityTokens.length && entityMatches === 0) score -= 8;\n  if (merchIntent && isBookLike(text)) score -= 12;\n  if (!merchIntent && entityTokens.length && entityMatches === 0) score -= 3;\n  if (urlLooksBad(url)) score -= 8;\n  return score;\n}\n\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const it = items[i].json || {};\n  const meta = $('Build Tavily Query').all()[i]?.json || {};\n  const results = Array.isArray(it.results) ? it.results : [];\n  const ranked = results\n    .filter(result => result && result.url)\n    .map(result => {\n      const text = (result.title || '') + ' ' + (result.raw_content || result.content || '');\n      return {\n        ...result,\n        _entity_matches: overlapCount(normalizeText(text), tokenize(meta.entity_hint || '')),\n        _product_matches: productMatchCount(text, meta.product_hint || ''),\n        _is_book_like: isBookLike(text),\n        _quality: qualityScore(result, meta),\n      };\n    })\n    .sort((a, b) => (b._quality || 0) - (a._quality || 0));\n\n  const safe = ranked.filter(result =>\n    !urlLooksBad(result.url)\n    && !result._is_book_like\n    && (result._quality || 0) >= 8\n    && (\n      (meta.intent_mode === 'merch' && result._product_matches > 0 && (!meta.entity_hint || result._entity_matches > 0))\n      || (meta.intent_mode !== 'merch' && (result._entity_matches > 0 || result._product_matches > 0))\n    )\n  );\n  const preferred = safe.filter(result => urlLooksProduct(result.url) && (result._quality || 0) >= 11);\n  const chosen = [];\n  const seen = new Set();\n\n  function pushResult(result, mode) {\n    if (!result || !result.url || seen.has(result.url)) return;\n    seen.add(result.url);\n    const raw = compact(result.raw_content || result.content || '').substring(0, 60000);\n    chosen.push({\n      json: {\n        run_date: meta.run_date ?? null,\n        source_topic: meta.source_topic ?? null,\n        source_pick_rank: meta.source_pick_rank ?? null,\n        opportunity_score: meta.opportunity_score ?? null,\n        tavily_query: meta.tavily_query ?? null,\n        entity_hint: meta.entity_hint ?? null,\n        product_hint: meta.product_hint ?? null,\n        intent_mode: meta.intent_mode ?? null,\n        tavily_url: result.url,\n        tavily_title: result.title || '',\n        tavily_score: result.score || 0,\n        tavily_quality_score: result._quality || 0,\n        tavily_entity_matches: result._entity_matches || 0,\n        tavily_product_matches: result._product_matches || 0,\n        tavily_raw_content: raw,\n        tavily_content_len: raw.length,\n        tavily_domain: (() => { try { return new URL(result.url).hostname; } catch { return null; } })(),\n        tavily_is_likely_product_page: urlLooksProduct(result.url),\n        tavily_selection_mode: mode,\n        suggested_product_type: meta.suggested_product_type ?? null,\n        target_audience: meta.target_audience ?? null,\n      }\n    });\n  }\n\n  for (const result of preferred) {\n    if (chosen.length >= 3) break;\n    pushResult(result, 'preferred');\n  }\n  for (const result of safe) {\n    if (chosen.length >= 3) break;\n    pushResult(result, 'fallback_safe');\n  }\n  if (!chosen.length && ranked.length) {\n    pushResult(ranked[0], 'last_resort');\n  }\n\n  out.push(...chosen);\n}\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        640
+      ],
+      "id": "p3hil-pil-0001",
+      "name": "Pick Indian Listings",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "thin-content-check",
+              "leftValue": "={{ ($json.tavily_content_len || 0) }}",
+              "rightValue": 500,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2064,
+        640
+      ],
+      "id": "p3hil-if-0001",
+      "name": "If Tavily Content Thin"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.browserbase.com/v1/fetch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $json.tavily_url, allowRedirects: true, proxies: true }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1536,
+        1216
+      ],
+      "id": "p3hil-bbf-0001",
+      "name": "Browserbase Fetch",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VaqaiCGZLn38cSq1",
+          "name": "Browserbase API (EL Phase 3)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\nconst out = [];\nfor (const it of items) {\n  const j = it.json || {};\n  const html = String(j.content || j.tavily_raw_content || '');\n  const cleaned = html\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<!--[\\s\\S]*?-->/g, ' ')\n    .replace(/<noscript[\\s\\S]*?<\\/noscript>/gi, ' ')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .substring(0, 60000);\n  out.push({ json: { ...j, tavily_raw_content: cleaned, tavily_content_len: cleaned.length, browserbase_used: true } });\n}\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        1216
+      ],
+      "id": "p3hil-strip-0001",
+      "name": "Strip HTML",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=REDACTED_GEMINI_KEY",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }, contents: [{ parts: [{ text: $json.gemini_prompt }] }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2480,
+        496
+      ],
+      "id": "p3hil-gem-0001",
+      "name": "Gemini Extract Product",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction parseJson(value, fallback) {\n  try { return JSON.parse(value); } catch { return fallback; }\n}\n\nconst runDateFallback = new Date().toISOString().substring(0, 10);\nreturn $input.all().flatMap((it) => {\n  const j = it.json || {};\n  const imageUrls = Array.isArray(j.image_urls) ? j.image_urls : parseJson(j.image_urls || '[]', []);\n  const offers = Array.isArray(j.offers) ? j.offers : parseJson(j.offers || '[]', []);\n  const offer = offers[0] || {};\n  const rawPayload = typeof j.raw_payload === 'string' ? parseJson(j.raw_payload, j.raw_payload) : (j.raw_payload || {});\n  const imageUrl = imageUrls[0] || null;\n  if (!j.product_url || !j.source_topic || !j.product_name) return [];\n\n  return [{\n    json: {\n      review_schema_version: 'hil_v1',\n      workflow_name: 'EL',\n      workflow_run_id: `EL:${j.run_date || runDateFallback}:${$execution.id || 'manual'}`,\n      run_date: j.run_date || runDateFallback,\n      source_provider: 'cj_dropshipping',\n      source_topic: j.source_topic,\n      source_pick_rank: j.source_pick_rank ?? null,\n      opportunity_score: j.opportunity_score ?? null,\n      product_name: j.product_name,\n      product_url: j.product_url,\n      product_sku: j.product_sku ?? null,\n      price_text: j.price_text ?? null,\n      price_numeric: j.price_numeric ?? null,\n      currency: j.currency ?? 'USD',\n      product_rating: null,\n      reviews_count: null,\n      image_url: imageUrl,\n      image_urls: JSON.stringify(imageUrls),\n      description: j.description ? String(j.description).substring(0, 300) : null,\n      supplier_name: offer.supplierName ?? null,\n      marketplace: 'cjdropshipping',\n      availability_status: 'unknown',\n      approval_status: 'pending',\n      approval_channel: 'telegram',\n      raw_payload: JSON.stringify({\n        source: 'cj_dropshipping',\n        offer,\n        raw_payload: rawPayload,\n      }),\n      scraped_at: j.scraped_at || new Date().toISOString(),\n    }\n  }];\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        1392
+      ],
+      "id": "p3hil-cjnorm-0001",
+      "name": "Normalize CJ Review",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction parseFirstJsonObject(text) {\n  if (!text) return {};\n  try {\n    const match = String(text).match(/\\{[\\s\\S]*\\}/);\n    return match ? JSON.parse(match[0]) : {};\n  } catch {\n    return {};\n  }\n}\n\nfunction compact(value) {\n  return String(value || '').replace(/\\s+/g, ' ').trim();\n}\n\nfunction normalizeText(value) {\n  return compact(value).toLowerCase().replace(/[^a-z0-9\\s]+/g, ' ').replace(/\\s+/g, ' ').trim();\n}\n\nfunction tokenize(value) {\n  return normalizeText(value).split(' ').filter(token => token.length > 2);\n}\n\nfunction overlapCount(text, tokens) {\n  return tokens.reduce((count, token) => count + (text.includes(token) ? 1 : 0), 0);\n}\n\nfunction toNumber(value) {\n  if (typeof value === 'number' && Number.isFinite(value)) return value;\n  const cleaned = compact(value).replace(/,/g, '');\n  const match = cleaned.match(/[\\d.]+/g);\n  if (!match || !match.length) return null;\n  const parsed = Number(match[0]);\n  return Number.isFinite(parsed) ? parsed : null;\n}\n\nfunction urlLooksBad(url) {\n  const value = String(url || '').toLowerCase();\n  return /[?&](k|q|keyword|search)=/.test(value)\n    || /\\/s(\\?|\\/|$)/.test(value)\n    || /(showroom|wholesale|collections?|category|categories|browse|results|product-insights|unboxed|blog|blogs|article|articles)/.test(value);\n}\n\nfunction urlLooksProduct(url) {\n  const value = String(url || '').toLowerCase();\n  return /(\\/dp\\/|\\/gp\\/product\\/|\\/product\\/|\\/products\\/|\\/item\\/|\\/offer\\/|\\/p\\/)/.test(value)\n    || /\\/b0[a-z0-9]{8,}/.test(value);\n}\n\nfunction parseImageUrls(value) {\n  if (Array.isArray(value)) {\n    return value.map(item => compact(item)).filter(item => /^https?:\\/\\//i.test(item));\n  }\n  if (typeof value === 'string' && value.trim()) {\n    try {\n      const parsed = JSON.parse(value);\n      if (Array.isArray(parsed)) {\n        return parsed.map(item => compact(item)).filter(item => /^https?:\\/\\//i.test(item));\n      }\n    } catch {}\n    if (/^https?:\\/\\//i.test(value.trim())) return [value.trim()];\n  }\n  return [];\n}\n\nfunction detectImageUrls(text) {\n  const matches = String(text || '').match(/https?:\\/\\/[^\\s\"'()]+(?:jpg|jpeg|png|webp|gif)/ig) || [];\n  return [...new Set(matches.map(item => compact(item)).filter(Boolean))].slice(0, 5);\n}\n\nfunction isUsableImageUrl(url) {\n  const value = String(url || '').toLowerCase();\n  if (!/^https?:\\/\\//i.test(value)) return false;\n  if (/(sprite|logo|icon|flag|placeholder|spacer|privacy|batman-returns|moengage|avatar|profileimage)/.test(value)) return false;\n  if (/\\.gif(?:\\?|$)/.test(value)) return false;\n  if (/\\/gif(?:\\/|\\?|$)/.test(value)) return false;\n  return true;\n}\n\nfunction detectPriceText(text) {\n  const match = String(text || '').match(/(?:^|[\\s(])(?:rs\\.?|inr|\\u20b9)\\s*[0-9][0-9,]*(?:\\.\\d{1,2})?/i);\n  return match ? compact(match[0]) : null;\n}\n\nfunction detectRating(text) {\n  const match = String(text || '').match(/\\b([0-5](?:\\.\\d)?)\\s*(?:out of 5|\\/5|stars?)\\b/i);\n  return match ? toNumber(match[1]) : null;\n}\n\nfunction detectReviewsCount(text) {\n  const match = String(text || '').match(/\\b([0-9][0-9,]{0,10})\\s*(?:ratings?|reviews?)\\b/i);\n  return match ? Math.round(toNumber(match[1])) : null;\n}\n\nfunction detectAvailability(text) {\n  const value = String(text || '').toLowerCase();\n  if (/currently unavailable|out of stock|sold out/.test(value)) return 'out_of_stock';\n  if (/\\bin stock\\b/.test(value)) return 'in_stock';\n  return 'unknown';\n}\n\nfunction cleanTitle(title) {\n  const text = compact(title);\n  if (!text) return null;\n  const cleaned = text\n    .replace(/^amazon\\.in\\s*:\\s*/i, '')\n    .replace(/^buy\\s+/i, '')\n    .replace(/\\s+online at low prices in india.*$/i, '')\n    .replace(/\\s+\\|\\s+amazon\\.in.*$/i, '')\n    .replace(/\\s+:\\s+amazon\\.in.*$/i, '')\n    .replace(/\\s+-\\s+amazon\\.in.*$/i, '')\n    .replace(/\\s+-\\s+alibaba\\.com.*$/i, '')\n    .trim();\n  if (!cleaned || /^404\\b/i.test(cleaned)) return null;\n  return cleaned;\n}\n\nfunction productMatchCount(text, productHint) {\n  const aliases = {\n    't shirt': ['t shirt', 'tshirt', 'shirt', 'tee', 'hoodie'],\n    'hoodie': ['hoodie', 'sweatshirt'],\n    'poster': ['poster', 'wall poster'],\n    'mug': ['mug', 'cup'],\n    'keychain': ['keychain', 'key chain'],\n    'sticker': ['sticker'],\n    'phone case': ['phone case', 'case', 'cover'],\n    'action figure': ['action figure', 'figurine', 'collectible', 'toy'],\n    'building blocks': ['building blocks', 'blocks', 'brick', 'bricks', 'lego'],\n  };\n  const list = aliases[productHint] || (productHint ? [productHint] : []);\n  const normalized = normalizeText(text);\n  return list.reduce((count, alias) => count + (normalized.includes(normalizeText(alias)) ? 1 : 0), 0);\n}\n\nfunction isBookLike(text) {\n  return /\\b(book|books|novel|novels|paperback|hardcover|kindle|author|authors)\\b/i.test(text);\n}\n\nconst runDateFallback = new Date().toISOString().substring(0, 10);\nconst promptItems = $('Prepare Gemini Prompt').all();\nreturn $input.all().flatMap((it) => {\n  const idx = it.pairedItem?.item ?? 0;\n  const base = promptItems[idx]?.json || {};\n  const response = it.json || {};\n  const geminiText = (response?.candidates?.[0]?.content?.parts || []).map(part => part?.text || '').join('').trim();\n  const extract = parseFirstJsonObject(geminiText);\n  if (!base.tavily_url || !base.source_topic || urlLooksBad(base.tavily_url)) return [];\n\n  let imageUrls = parseImageUrls(extract.image_urls);\n  if (!imageUrls.length) imageUrls = detectImageUrls(base.tavily_raw_content);\n  imageUrls = imageUrls.filter(isUsableImageUrl);\n  const imageUrl = imageUrls[0] || null;\n  const fallbackText = [base.tavily_title || '', base.tavily_raw_content || ''].join('\\n');\n  const rating = toNumber(extract.rating) ?? detectRating(fallbackText);\n  const reviewsCountRaw = toNumber(extract.reviews_count) ?? detectReviewsCount(fallbackText);\n  const reviewsCount = reviewsCountRaw == null ? null : Math.round(reviewsCountRaw);\n  const priceText = extract.price_text || detectPriceText(fallbackText);\n  const priceInr = toNumber(extract.price_inr) ?? toNumber(priceText);\n  const productName = extract.product_name || cleanTitle(base.tavily_title);\n  const marketplaceHost = (() => { try { return new URL(base.tavily_url).hostname; } catch { return null; } })();\n  const likelyProductPage = extract.is_product_page === true || !!base.tavily_is_likely_product_page || urlLooksProduct(base.tavily_url);\n  const hasReviewSignals = Boolean(priceText || imageUrl || rating != null || reviewsCount != null);\n  const textForMatch = normalizeText([productName || '', fallbackText, extract.description || ''].join(' '));\n  const entityMatches = overlapCount(textForMatch, tokenize(base.entity_hint || ''));\n  const productMatches = productMatchCount(textForMatch, base.product_hint || '');\n  const merchIntent = base.intent_mode === 'merch' || /(merchandise|t shirt|hoodie|poster|mug|keychain|case|shirt|cover|cap)/i.test(base.tavily_query || '');\n  const titleLooks404 = /^404\\b/i.test(compact(base.tavily_title || '')) || /^404\\b/i.test(compact(productName || ''));\n  const availability = extract.in_stock === true\n    ? 'in_stock'\n    : extract.in_stock === false\n      ? 'out_of_stock'\n      : detectAvailability(fallbackText);\n\n  if (!productName) return [];\n  if (titleLooks404) return [];\n  if (extract.is_product_page === false && !likelyProductPage && !hasReviewSignals) return [];\n  if (!likelyProductPage && !hasReviewSignals) return [];\n  if (isBookLike(textForMatch) && merchIntent) return [];\n  if (merchIntent && (!productMatches || (base.entity_hint && !entityMatches))) return [];\n  if (!merchIntent && base.entity_hint && !entityMatches && !productMatches) return [];\n  if (!priceText && !imageUrl) return [];\n  if (priceInr != null && priceInr < 20) return [];\n\n  return [{\n    json: {\n      review_schema_version: 'hil_v1',\n      workflow_name: 'EL',\n      workflow_run_id: 'EL:' + (base.run_date || runDateFallback) + ':' + ($execution.id || 'manual'),\n      run_date: base.run_date || runDateFallback,\n      source_provider: 'browserbase_marketplace',\n      source_topic: base.source_topic,\n      source_pick_rank: base.source_pick_rank ?? null,\n      opportunity_score: base.opportunity_score ?? null,\n      product_name: productName,\n      product_url: base.tavily_url,\n      product_sku: null,\n      price_text: priceText,\n      price_numeric: priceInr,\n      currency: 'INR',\n      product_rating: rating,\n      reviews_count: reviewsCount,\n      image_url: imageUrl,\n      image_urls: JSON.stringify(imageUrls),\n      description: extract.description ? compact(String(extract.description)).substring(0, 300) : null,\n      supplier_name: extract.supplier_name || null,\n      marketplace: extract.marketplace || base.tavily_domain || marketplaceHost || null,\n      availability_status: availability,\n      approval_status: 'pending',\n      approval_channel: 'telegram',\n      raw_payload: JSON.stringify({\n        source: 'browserbase_marketplace',\n        tavily_query: base.tavily_query ?? null,\n        tavily_score: base.tavily_score ?? null,\n        tavily_quality_score: base.tavily_quality_score ?? null,\n        tavily_entity_matches: base.tavily_entity_matches ?? null,\n        tavily_product_matches: base.tavily_product_matches ?? null,\n        tavily_title: base.tavily_title ?? null,\n        tavily_domain: base.tavily_domain ?? null,\n        tavily_selection_mode: base.tavily_selection_mode ?? null,\n        tavily_is_likely_product_page: !!base.tavily_is_likely_product_page,\n        browserbase_used: !!base.browserbase_used,\n        gemini_status: response?.statusCode ?? 200,\n        gemini_error: response?.error?.message ?? null,\n        extract,\n      }),\n      scraped_at: new Date().toISOString(),\n    }\n  }];\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2544,
+        640
+      ],
+      "id": "p3hil-bbnorm-0001",
+      "name": "Normalize Browserbase Review",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2256,
+        1216
+      ],
+      "id": "p3hil-merge-0001",
+      "name": "Merge Review Sources"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "private",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "hil_reviews",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "workflow_run_id",
+            "source_provider",
+            "source_topic",
+            "product_url"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "review_schema_version",
+              "displayName": "review_schema_version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "workflow_name",
+              "displayName": "workflow_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "workflow_run_id",
+              "displayName": "workflow_run_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "run_date",
+              "displayName": "run_date",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "source_provider",
+              "displayName": "source_provider",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_topic",
+              "displayName": "source_topic",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_pick_rank",
+              "displayName": "source_pick_rank",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "opportunity_score",
+              "displayName": "opportunity_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "product_name",
+              "displayName": "product_name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "product_url",
+              "displayName": "product_url",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "product_sku",
+              "displayName": "product_sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "price_text",
+              "displayName": "price_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "price_numeric",
+              "displayName": "price_numeric",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "product_rating",
+              "displayName": "product_rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "reviews_count",
+              "displayName": "reviews_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "image_urls",
+              "displayName": "image_urls",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "supplier_name",
+              "displayName": "supplier_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "marketplace",
+              "displayName": "marketplace",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "availability_status",
+              "displayName": "availability_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "approval_status",
+              "displayName": "approval_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "approval_channel",
+              "displayName": "approval_channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "callback_token",
+              "displayName": "callback_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "telegram_chat_id",
+              "displayName": "telegram_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "telegram_message_id",
+              "displayName": "telegram_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "telegram_media_status",
+              "displayName": "telegram_media_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "telegram_sent_at",
+              "displayName": "telegram_sent_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "reviewed_by",
+              "displayName": "reviewed_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "reviewed_at",
+              "displayName": "reviewed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "raw_payload",
+              "displayName": "raw_payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "scraped_at",
+              "displayName": "scraped_at",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2672,
+        1200
+      ],
+      "id": "p3hil-pg-0001",
+      "name": "Supabase Insert (HIL Reviews)",
+      "credentials": {
+        "postgres": {
+          "id": "Tx3i0fewZ8MM6LFt",
+          "name": "Supabase yatralounge (Dropship Memory)"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "content": "## Phase 3b - Browserbase Marketplace Review\n\nParse Agent Output feeds a second discovery branch for Indian marketplaces.\nTavily finds product pages, Browserbase fills thin pages, Gemini extracts product fields,\nand Normalize Browserbase Review converts the result into the exact HITL contract.",
+        "height": 552,
+        "width": 1552,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        368
+      ],
+      "id": "p3hil-sticky-0001",
+      "name": "cluster:phase3b-browserbase-review"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst SYSTEM = \"You are extracting one product listing from an Indian marketplace page. \"\n  + \"Return only a single JSON object. No markdown. No explanation. \"\n  + \"If the page is a search, category, showroom, or wholesale listing page rather than a single product detail page, \"\n  + \"set is_product_page to false and keep product_name, price_text, price_inr, image_urls, rating, and reviews_count as null. \"\n  + \"Keys: product_name (string), price_text (string or null), price_inr (number or null), \"\n  + \"description (string max 300 chars or null), image_urls (array of absolute URL strings), \"\n  + \"marketplace (string domain like amazon.in or alibaba.com or null), rating (number 0-5 or null), \"\n  + \"reviews_count (integer or null), in_stock (boolean or null), supplier_name (string or null), \"\n  + \"is_product_page (boolean), reject_reason (string or null).\";\n\nfunction detectDomain(url) {\n  try { return new URL(url).hostname; } catch { return null; }\n}\n\nconst items = $input.all();\nconst out = [];\nfor (const it of items) {\n  const j = it.json || {};\n  const url = j.tavily_url || '';\n  const content = String(j.tavily_raw_content || '').slice(0, 60000);\n  if (!url || content.length < 50) {\n    out.push({ json: { ...j, gemini_prompt: null, gemini_skipped: 'thin or missing input' } });\n    continue;\n  }\n  const prompt = SYSTEM\n    + \"\\n\\nURL: \" + url\n    + \"\\nPage title: \" + String(j.tavily_title || '')\n    + \"\\nMarketplace domain: \" + String(j.tavily_domain || detectDomain(url) || '')\n    + \"\\n\\nMarketplace page text:\\n\" + content;\n  out.push({ json: { ...j, gemini_prompt: prompt } });\n}\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        496
+      ],
+      "id": "p3hil-gprep-0001",
+      "name": "Prepare Gemini Prompt",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst MIN_SCORE = 25;\nconst FALLBACK_MIN_SCORE = 20;\nconst FALLBACK_MAX_ITEMS = 2;\nconst TOPIC_CAP = 2;\nconst CJ_PROVIDER_CAP = 5;\nconst BROWSERBASE_PROVIDER_CAP = 7;\nconst TOTAL_CAP = 10;\n\nconst STOP = new Set([\n  'the', 'and', 'for', 'with', 'from', 'that', 'this', 'your', 'into', 'online',\n  'india', 'buy', 'shop', 'store', 'official', 'new', 'latest', 'best'\n]);\nconst TOPIC_NOISE = new Set([\n  'trailer', 'teaser', 'official', 'movie', 'season', 'episode', 'youtube', 'news',\n  'video', 'song', 'lyrics', 'review', 'return', 'returns', 'opening', 'challenge',\n  'build', 'back', 'everyone', 'nerdy'\n]);\nconst GENERIC_PRODUCT_TERMS = [\n  't shirt', 'tshirt', 'shirt', 'hoodie', 'poster', 'mug', 'keychain', 'sticker',\n  'phone case', 'cover', 'jersey', 'figurine', 'action figure', 'collectible',\n  'merchandise', 'plush', 'toy', 'mouse pad', 'desk mat', 'notebook', 'cap'\n];\nconst ALLOWED_MEDIA_PRODUCT_TERMS = [\n  't shirt', 'tshirt', 'shirt', 'hoodie', 'poster', 'mug', 'keychain', 'sticker',\n  'phone case', 'cover', 'figurine', 'action figure', 'collectible', 'plush',\n  'toy', 'mouse pad', 'desk mat', 'notebook', 'cap'\n];\nconst ALLOWED_GAMING_PRODUCT_TERMS = [\n  'mouse pad', 'desk mat', 'phone case', 'cover', 'sticker', 'poster', 'hoodie',\n  't shirt', 'tshirt', 'shirt', 'mug', 'keychain', 'figurine', 'action figure',\n  'collectible', 'controller skin', 'controller grip', 'gaming sleeve'\n];\nconst HARD_BLOCK_TERMS = [\n  'repair tool', 'tool box', 'opening tool', 'service hard case', 'hard case',\n  'skin care lotion', 'pruritus', 'earrings', 'flats', 'dress', 'sleeveless',\n  'women s shoes', 'ointment', 'cream', 'medical', 'body care', 'shoe', 'shoes',\n  'heels', 'sandals'\n];\nconst ENTERTAINMENT_TERMS = [\n  'trailer', 'teaser', 'movie', 'season', 'episode', 'song', 'lyrics', 'youtube',\n  'music', 'video', 'album', 'gana', 'gaana', 'magahi', 'bhojpuri', 'punjabi',\n  'singer', 'artist', 'official video', 'new song'\n];\nconst CJ_ENTERTAINMENT_BLOCKLIST = [\n  'flats', 'earrings', 'dress', 'sleeveless', 'body care', 'medical', 'ointment',\n  'cream', 'skin care', 'pruritus', 'women s shoes', 'soft bottomed', 'lightweight shoes'\n];\nconst GAMING_TERMS = [\n  'bgmi', 'pubg', 'gta', 'gameplay', 'gaming', 'gamer', 'franklin', 'mr meat',\n  'indian bike driving', '3d', 'jonathan', 'battlegrounds'\n];\nconst ENTITY_FAMILIES = [\n  { topic: ['wolverine', 'ultron', 'avengers', 'wakanda', 'marvel', 'doomsday', 'hulk'], product: ['marvel', 'wolverine', 'ultron', 'avengers', 'wakanda', 'hulk', 'iron man', 'captain america', 'thor'] },\n  { topic: ['bgmi', 'pubg', 'jonathan', 'battlegrounds'], product: ['bgmi', 'pubg', 'battlegrounds', 'gaming', 'gamer', 'joystick', 'controller', 'mouse pad'] },\n  { topic: ['sidhu', 'moose', 'wala'], product: ['sidhu', 'moose', 'wala', 'punjabi', 'music', 'singer', 'artist'] },\n  { topic: ['ashish', 'khushi', 'amarpali', 'nache'], product: ['ashish', 'khushi', 'amarpali', 'music', 'song', 'artist', 'poster', 't shirt'] },\n];\nconst TERMINAL_REJECTION_STAGES = new Set(['reviewability', 'mismatch', 'dedupe', 'cap']);\nconst TERMINAL_REJECTION_CODES = new Set([\n  'missing_product_name',\n  'missing_product_url',\n  'missing_source_topic',\n  'bad_product_url',\n  'out_of_stock',\n  'missing_price_and_image',\n  'hard_block_term',\n  'browserbase_repair_tool',\n  'cj_not_listed',\n  'cj_blocked_category',\n  'gaming_missing_allowed_noun',\n  'gaming_missing_entity_signal',\n  'media_missing_allowed_noun',\n  'media_missing_entity_signal',\n  'direct_product_hard_block',\n  'duplicate_candidate',\n  'topic_cap_reached',\n  'provider_cap_reached',\n  'total_cap_reached',\n]);\n\nfunction compact(value) {\n  return String(value || '').replace(/\\s+/g, ' ').trim();\n}\n\nfunction normalizeText(value) {\n  return compact(value)\n    .toLowerCase()\n    .replace(/[^a-z0-9\\s]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction tokenize(value) {\n  return normalizeText(value)\n    .split(' ')\n    .filter((token) => token.length > 2 && !STOP.has(token));\n}\n\nfunction toNumber(value) {\n  if (typeof value === 'number' && Number.isFinite(value)) return value;\n  const text = compact(value).replace(/,/g, '');\n  if (!text) return null;\n  const match = text.match(/-?\\d+(?:\\.\\d+)?/);\n  if (!match) return null;\n  const parsed = Number(match[0]);\n  return Number.isFinite(parsed) ? parsed : null;\n}\n\nfunction matchedTerms(text, terms) {\n  const normalized = normalizeText(text);\n  const matches = [];\n  for (const term of terms) {\n    const needle = normalizeText(term);\n    if (needle && (' ' + normalized + ' ').includes(' ' + needle + ' ')) {\n      matches.push(needle);\n    }\n  }\n  return Array.from(new Set(matches));\n}\n\nfunction countTermMatches(text, terms) {\n  return matchedTerms(text, terms).length;\n}\n\nfunction clamp(value, min, max) {\n  return Math.max(min, Math.min(max, value));\n}\n\nfunction safeUrl(value) {\n  try {\n    return new URL(String(value || '').trim());\n  } catch {\n    return null;\n  }\n}\n\nfunction extractHostname(value) {\n  const match = compact(value).match(/^https?:\\/\\/([^\\/?#]+)/i);\n  return match ? String(match[1]).toLowerCase() : null;\n}\n\nfunction canonicalUrl(value) {\n  const parsed = safeUrl(value);\n  if (!parsed) return compact(value).toLowerCase();\n  parsed.hash = '';\n  const keep = ['pid', 'sku', 'id', 'product_id'];\n  const params = new URLSearchParams();\n  for (const key of keep) {\n    const param = parsed.searchParams.get(key);\n    if (param) params.set(key, param);\n  }\n  parsed.search = params.toString() ? '?' + params.toString() : '';\n  return parsed.toString().replace(/\\/$/, '');\n}\n\nfunction hostOf(value) {\n  const parsed = safeUrl(value);\n  if (parsed && parsed.hostname) return parsed.hostname.toLowerCase();\n  const fallback = extractHostname(value);\n  return fallback || compact(value).toLowerCase();\n}\n\nfunction imageKey(value) {\n  const parsed = safeUrl(value);\n  if (!parsed) return null;\n  parsed.search = '';\n  parsed.hash = '';\n  return parsed.toString().replace(/\\/$/, '');\n}\n\nfunction overlapRatio(a, b) {\n  if (!a.size || !b.size) return 0;\n  let overlap = 0;\n  for (const item of a) {\n    if (b.has(item)) overlap += 1;\n  }\n  return overlap / Math.min(a.size, b.size);\n}\n\nfunction looksBadUrl(value) {\n  const text = compact(value).toLowerCase();\n  return /[?&](q|k|keyword|search)=/.test(text)\n    || /\\/s(\\?|\\/|$)/.test(text)\n    || /(search|showroom|wholesale|collection|collections|category|categories|browse|results|blog|article)/.test(text);\n}\n\nfunction parseRawPayload(value) {\n  if (!value) return {};\n  if (typeof value === 'object' && !Array.isArray(value)) return value;\n  try {\n    return JSON.parse(value);\n  } catch {\n    return { raw: value };\n  }\n}\n\nfunction topicTokensForMatch(text) {\n  return tokenize(text).filter((token) => !TOPIC_NOISE.has(token));\n}\n\nfunction classifyTopicIntent(text) {\n  const normalized = normalizeText(text);\n  const entertainmentHits = countTermMatches(normalized, ENTERTAINMENT_TERMS);\n  const gamingHits = countTermMatches(normalized, GAMING_TERMS);\n  const hashtagHits = (String(text || '').match(/#\\S+/g) || []).length;\n  const separatorHits = (String(text || '').match(/[|&]|\\bft\\b|\\bfeat\\b/ig) || []).length;\n  if (gamingHits > 0) return 'gaming_merch';\n  if (entertainmentHits > 0 || hashtagHits >= 2 || separatorHits >= 2) return 'media_merch';\n  return 'direct_product';\n}\n\nfunction entertainmentTopicSignals(text) {\n  const normalized = normalizeText(text);\n  const termHits = countTermMatches(normalized, ENTERTAINMENT_TERMS);\n  const hashtagHits = (String(text || '').match(/#\\S+/g) || []).length;\n  const quotedEntityHits = (String(text || '').match(/[|&]|\\bft\\b|\\bfeat\\b/ig) || []).length;\n  return {\n    termHits,\n    hashtagHits,\n    quotedEntityHits,\n    isEntertainment:\n      termHits > 0\n      || hashtagHits >= 2\n      || quotedEntityHits >= 2\n      || /\\b(video|gana|gaana|song|lyrics|teaser|trailer)\\b/i.test(String(text || '')),\n  };\n}\n\nfunction overlapCount(a, b) {\n  if (!a.size || !b.size) return 0;\n  let overlap = 0;\n  for (const item of a) {\n    if (b.has(item)) overlap += 1;\n  }\n  return overlap;\n}\n\nfunction previewText(text, maxLength) {\n  const value = compact(text);\n  return value.length > maxLength ? value.slice(0, maxLength - 1) + '\u2026' : value;\n}\n\nfunction buildContext(row, rawPayload) {\n  const productCoreText = [\n    row.product_name,\n    row.description,\n    row.supplier_name,\n    row.marketplace,\n    rawPayload?.extract?.description,\n    rawPayload?.extract?.product_name,\n    rawPayload?.extract?.supplier_name,\n    rawPayload?.offer?.categoryName,\n    rawPayload?.raw_payload?.categoryName,\n    rawPayload?.raw_payload?.productNameEn,\n    rawPayload?.raw_payload?.productName,\n  ].filter(Boolean).join(' ');\n  const productText = [\n    productCoreText,\n    rawPayload?.tavily_query,\n    rawPayload?.tavily_title,\n  ].filter(Boolean).join(' ');\n  const topicText = [row.source_topic, rawPayload?.tavily_query].filter(Boolean).join(' ');\n  const topicTokens = new Set(topicTokensForMatch(topicText));\n  const productTokens = new Set(tokenize(productText));\n  const topicOverlap = overlapCount(topicTokens, productTokens);\n  const genericMerchTerms = matchedTerms(productCoreText, GENERIC_PRODUCT_TERMS);\n  const mediaAllowedTerms = matchedTerms(productCoreText, ALLOWED_MEDIA_PRODUCT_TERMS);\n  const gamingAllowedTerms = matchedTerms(productCoreText, ALLOWED_GAMING_PRODUCT_TERMS);\n  const hardBlockTerms = matchedTerms(productCoreText, HARD_BLOCK_TERMS);\n  const cjBlockedTerms = matchedTerms(productCoreText, CJ_ENTERTAINMENT_BLOCKLIST);\n  const browserbaseEntityMatches = toNumber(rawPayload?.tavily_entity_matches) ?? 0;\n  const browserbaseProductMatches = toNumber(rawPayload?.tavily_product_matches) ?? 0;\n  const listedNum = toNumber(rawPayload?.offer?.listedNum ?? rawPayload?.raw_payload?.listedNum);\n  const topicSignals = entertainmentTopicSignals(topicText);\n  const topicIntentType = classifyTopicIntent(topicText);\n  const mediaTopic = topicIntentType !== 'direct_product';\n  const normalizedTopicText = normalizeText(topicText);\n  const normalizedProductText = normalizeText(productText);\n  const normalizedProductCoreText = normalizeText(productCoreText);\n  const familyMatches = [];\n\n  for (const family of ENTITY_FAMILIES) {\n    const topicHits = family.topic.filter((term) => normalizedTopicText.includes(normalizeText(term)));\n    const productHits = family.product.filter((term) => normalizedProductText.includes(normalizeText(term)));\n    if (topicHits.length && productHits.length) {\n      familyMatches.push({\n        topic_terms: Array.from(new Set(topicHits.map((term) => normalizeText(term)))),\n        product_terms: Array.from(new Set(productHits.map((term) => normalizeText(term)))),\n      });\n    }\n  }\n\n  return {\n    productCoreText,\n    productText,\n    topicText,\n    topicTokens,\n    productTokens,\n    topicOverlap,\n    genericMerchTerms,\n    genericMerchMatches: genericMerchTerms.length,\n    mediaAllowedTerms,\n    mediaAllowedMatches: mediaAllowedTerms.length,\n    gamingAllowedTerms,\n    gamingAllowedMatches: gamingAllowedTerms.length,\n    hardBlockTerms,\n    hardBlockMatches: hardBlockTerms.length,\n    cjBlockedTerms,\n    browserbaseEntityMatches,\n    browserbaseProductMatches,\n    listedNum,\n    mediaTopic,\n    topicIntentType,\n    topicSignals,\n    familyMatch: familyMatches.length > 0,\n    familyMatches,\n    normalizedTopicText,\n    normalizedProductText,\n    normalizedProductCoreText,\n  };\n}\n\nfunction buildReason(stage, code, message, details) {\n  return {\n    stage,\n    code,\n    message,\n    details: details || {},\n  };\n}\n\nfunction hasTerminalRejection(candidate) {\n  return candidate.rejectionReasons.some((reason) => (\n    TERMINAL_REJECTION_STAGES.has(reason.stage)\n    || TERMINAL_REJECTION_CODES.has(reason.code)\n  ));\n}\n\nfunction hasOnlyScoreRejections(candidate) {\n  return candidate.rejectionReasons.length > 0\n    && candidate.rejectionReasons.every((reason) => reason.stage === 'score');\n}\n\nfunction hasFallbackEvidence(candidate) {\n  const row = candidate.row || {};\n  const context = candidate.context || {};\n  const price = toNumber(row.price_numeric);\n  const hasCommercialSignal = Boolean(row.image_url && (row.price_text || price != null));\n  const hasTopicSignal = context.topicOverlap > 0\n    || context.familyMatch\n    || (context.browserbaseEntityMatches || 0) > 0\n    || context.topicIntentType === 'direct_product';\n  return hasCommercialSignal && hasTopicSignal;\n}\n\nfunction mismatchReasons(row, context) {\n  const reasons = [];\n  const hasEntitySignal = context.topicOverlap > 0 || context.familyMatch || context.browserbaseEntityMatches > 0;\n  const hasAllowedMediaNoun = context.mediaAllowedMatches > 0;\n  const hasAllowedGamingNoun = context.gamingAllowedMatches > 0;\n\n  if (context.hardBlockTerms.length > 0) {\n    reasons.push(buildReason(\n      'mismatch',\n      'hard_block_term',\n      'Blocked because the product text contains banned drift terms.',\n      { matched_terms: context.hardBlockTerms }\n    ));\n  }\n\n  if (\n    row.source_provider === 'browserbase_marketplace'\n    && /repair tool|tool box|opening tool|service hard case|hard case/.test(context.normalizedProductCoreText)\n  ) {\n    reasons.push(buildReason(\n      'mismatch',\n      'browserbase_repair_tool',\n      'Blocked browserbase result because the product looks like a repair tool or service case.',\n      { matched_terms: matchedTerms(context.productCoreText, ['repair tool', 'tool box', 'opening tool', 'service hard case', 'hard case']) }\n    ));\n  }\n\n  if (row.source_provider === 'cj_dropshipping' && context.listedNum != null && context.listedNum <= 0) {\n    reasons.push(buildReason(\n      'mismatch',\n      'cj_not_listed',\n      'Blocked CJ product because listedNum is missing or non-positive.',\n      { listed_num: context.listedNum }\n    ));\n  }\n\n  if (row.source_provider === 'cj_dropshipping' && context.cjBlockedTerms.length > 0) {\n    reasons.push(buildReason(\n      'mismatch',\n      'cj_blocked_category',\n      'Blocked CJ product because it falls into an entertainment-topic category blocklist.',\n      { matched_terms: context.cjBlockedTerms }\n    ));\n  }\n\n  if (context.topicIntentType === 'gaming_merch' && !hasAllowedGamingNoun) {\n    reasons.push(buildReason(\n      'mismatch',\n      'gaming_missing_allowed_noun',\n      'Blocked gaming topic because the product text has no allowed gaming merch noun.',\n      { allowed_terms_found: context.gamingAllowedTerms }\n    ));\n  }\n\n  if (context.topicIntentType === 'gaming_merch' && !hasEntitySignal) {\n    reasons.push(buildReason(\n      'mismatch',\n      'gaming_missing_entity_signal',\n      'Blocked gaming topic because the product has no topic/entity overlap.',\n      {\n        topic_overlap: context.topicOverlap,\n        family_match: context.familyMatch,\n        browserbase_entity_matches: context.browserbaseEntityMatches,\n      }\n    ));\n  }\n\n  if (context.topicIntentType === 'media_merch' && !hasAllowedMediaNoun) {\n    reasons.push(buildReason(\n      'mismatch',\n      'media_missing_allowed_noun',\n      'Blocked media topic because the product text has no allowed merch noun.',\n      { allowed_terms_found: context.mediaAllowedTerms }\n    ));\n  }\n\n  if (context.topicIntentType === 'media_merch' && !hasEntitySignal) {\n    reasons.push(buildReason(\n      'mismatch',\n      'media_missing_entity_signal',\n      'Blocked media topic because the product has no topic/entity overlap.',\n      {\n        topic_overlap: context.topicOverlap,\n        family_match: context.familyMatch,\n        browserbase_entity_matches: context.browserbaseEntityMatches,\n      }\n    ));\n  }\n\n  if (context.topicIntentType === 'direct_product' && context.hardBlockMatches > 0 && !hasEntitySignal) {\n    reasons.push(buildReason(\n      'mismatch',\n      'direct_product_hard_block',\n      'Blocked direct-product topic because the item only matches banned drift terms and lacks entity support.',\n      {\n        matched_terms: context.hardBlockTerms,\n        topic_overlap: context.topicOverlap,\n        family_match: context.familyMatch,\n        browserbase_entity_matches: context.browserbaseEntityMatches,\n      }\n    ));\n  }\n\n  return reasons;\n}\n\nfunction selectionScore(row, context) {\n  const opportunity = toNumber(row.opportunity_score) ?? 0;\n  const pickRank = toNumber(row.source_pick_rank);\n  const rating = toNumber(row.product_rating);\n  const reviews = toNumber(row.reviews_count);\n  const price = toNumber(row.price_numeric);\n  const availability = compact(row.availability_status).toLowerCase();\n  const host = hostOf(row.product_url || row.marketplace || '');\n\n  let score = 0;\n  score += clamp(opportunity, 0, 10) * 6;\n  if (pickRank != null) score += clamp(12 - pickRank, 0, 10) * 1.8;\n  if (rating != null) score += clamp(rating, 0, 5) * 4;\n  if (reviews != null) score += clamp(Math.log10(reviews + 1) * 8, 0, 22);\n  if (row.image_url) score += 7;\n  if (row.price_text || price != null) score += 5;\n  if (row.description) score += 3;\n  if (availability === 'in_stock') score += 4;\n  if (availability === 'out_of_stock') score -= 20;\n  if (looksBadUrl(row.product_url)) score -= 20;\n  if (/amazon\\.in|flipkart\\.com|myntra\\.com|ajio\\.com|nykaa\\.com|meesho\\.com|croma\\.com|firstcry\\.com/.test(host)) score += 4;\n  if (row.source_provider === 'browserbase_marketplace') score += 2;\n  if (row.source_provider === 'cj_dropshipping') score += 1;\n  if (price != null && price > 0) score += 2;\n  if (context.topicOverlap > 0) score += clamp(context.topicOverlap * 6, 0, 18);\n  if (context.familyMatch) score += 8;\n  if (context.genericMerchMatches > 0) score += clamp(context.genericMerchMatches * 2, 0, 8);\n  if (context.browserbaseEntityMatches > 0) score += clamp(context.browserbaseEntityMatches * 5, 0, 15);\n  if (context.browserbaseProductMatches > 0) score += clamp(context.browserbaseProductMatches * 3, 0, 9);\n  if (context.hardBlockMatches > 0) score -= clamp(context.hardBlockMatches * 20, 0, 60);\n  if (context.mediaTopic && context.topicOverlap === 0 && !context.familyMatch) score -= 25;\n  if (!row.product_name) score -= 100;\n  if (!row.product_url) score -= 100;\n  return Math.round(score * 100) / 100;\n}\n\nfunction reviewabilityReasons(row, context) {\n  const reasons = [];\n\n  if (!compact(row.product_name)) {\n    reasons.push(buildReason('reviewability', 'missing_product_name', 'Blocked because product_name is empty.'));\n  }\n  if (!compact(row.product_url)) {\n    reasons.push(buildReason('reviewability', 'missing_product_url', 'Blocked because product_url is empty.'));\n  }\n  if (!compact(row.source_topic)) {\n    reasons.push(buildReason('reviewability', 'missing_source_topic', 'Blocked because source_topic is empty.'));\n  }\n  if (looksBadUrl(row.product_url)) {\n    reasons.push(buildReason('reviewability', 'bad_product_url', 'Blocked because the URL looks like a search/listing page.', {\n      product_url: row.product_url,\n    }));\n  }\n  if (compact(row.availability_status).toLowerCase() === 'out_of_stock') {\n    reasons.push(buildReason('reviewability', 'out_of_stock', 'Blocked because the item is marked out of stock.'));\n  }\n  if (!row.image_url && !row.price_text && toNumber(row.price_numeric) == null) {\n    reasons.push(buildReason(\n      'reviewability',\n      'missing_price_and_image',\n      'Blocked because the candidate has neither image nor price signal.'\n    ));\n  }\n\n  reasons.push(...mismatchReasons(row, context));\n  return reasons;\n}\n\nfunction buildDiagnostics(entry) {\n  return {\n    decision: entry.selected ? 'selected' : 'rejected',\n    score: entry.score,\n    min_score: MIN_SCORE,\n    topic_intent_type: entry.context.topicIntentType,\n    source_provider: compact(entry.row.source_provider).toLowerCase() || null,\n    source_host: entry.host || null,\n    dedupe_name_key: entry.normalizedName || null,\n    topic_overlap: entry.context.topicOverlap,\n    family_match: entry.context.familyMatch,\n    family_matches: entry.context.familyMatches,\n    browserbase_entity_matches: entry.context.browserbaseEntityMatches,\n    browserbase_product_matches: entry.context.browserbaseProductMatches,\n    generic_merch_terms: entry.context.genericMerchTerms,\n    media_allowed_terms: entry.context.mediaAllowedTerms,\n    gaming_allowed_terms: entry.context.gamingAllowedTerms,\n    hard_block_terms: entry.context.hardBlockTerms,\n    cj_blocked_terms: entry.context.cjBlockedTerms,\n    listed_num: entry.context.listedNum,\n    topic_signals: entry.context.topicSignals,\n    product_text_preview: previewText(entry.context.productCoreText, 220),\n    topic_text_preview: previewText(entry.context.topicText, 180),\n    rejection_reasons: entry.rejectionReasons,\n  };\n}\n\nfunction attachPayload(entry, selection) {\n  const diagnostics = buildDiagnostics(entry);\n  const rawPayload = {\n    ...entry.rawPayload,\n    phase4_selection: selection || null,\n    phase4_debug: diagnostics,\n  };\n  return {\n    ...entry.row,\n    raw_payload: JSON.stringify(rawPayload),\n  };\n}\n\nconst input = $input.all().map((item) => item.json || {});\nconst prepared = input.map((row) => {\n  const nameTokens = new Set(tokenize(row.product_name));\n  const normalizedName = Array.from(nameTokens).join(' ');\n  const url = canonicalUrl(row.product_url);\n  const img = imageKey(row.image_url);\n  const rawPayload = parseRawPayload(row.raw_payload);\n  const context = buildContext(row, rawPayload);\n  const score = selectionScore(row, context);\n  const rejectionReasons = reviewabilityReasons(row, context);\n\n  if (score < MIN_SCORE) {\n    rejectionReasons.push(buildReason(\n      'score',\n      'below_min_score',\n      'Blocked because the candidate score is below the phase 4 threshold.',\n      { score, min_score: MIN_SCORE }\n    ));\n  }\n\n  return {\n    row,\n    score,\n    url,\n    img,\n    host: hostOf(row.product_url || row.marketplace || ''),\n    normalizedName,\n    nameTokens,\n    rawPayload,\n    context,\n    rejectionReasons,\n    selected: false,\n  };\n});\n\nconst eligible = prepared.filter((entry) => entry.rejectionReasons.length === 0);\n\neligible.sort((a, b) => {\n  if (b.score !== a.score) return b.score - a.score;\n  const oppA = toNumber(a.row.opportunity_score) ?? -1;\n  const oppB = toNumber(b.row.opportunity_score) ?? -1;\n  if (oppB !== oppA) return oppB - oppA;\n  const rankA = toNumber(a.row.source_pick_rank) ?? 999;\n  const rankB = toNumber(b.row.source_pick_rank) ?? 999;\n  return rankA - rankB;\n});\n\nconst deduped = [];\nfor (const candidate of eligible) {\n  let duplicateOf = null;\n  for (const kept of deduped) {\n    const sameUrl = candidate.url && kept.url && candidate.url === kept.url;\n    const sameImage = candidate.img && kept.img && candidate.img === kept.img;\n    const sameTopic = normalizeText(candidate.row.source_topic) === normalizeText(kept.row.source_topic);\n    const sameHost = candidate.host && kept.host && candidate.host === kept.host;\n    const similarName = overlapRatio(candidate.nameTokens, kept.nameTokens) >= 0.8;\n    if (sameUrl || sameImage || (sameTopic && sameHost && similarName)) {\n      duplicateOf = kept;\n      break;\n    }\n  }\n  if (duplicateOf) {\n    candidate.rejectionReasons.push(buildReason(\n      'dedupe',\n      'duplicate_candidate',\n      'Blocked because a higher-ranked near-duplicate was already kept.',\n      {\n        duplicate_of_product: duplicateOf.row.product_name || null,\n        duplicate_of_url: duplicateOf.row.product_url || null,\n        duplicate_of_score: duplicateOf.score,\n      }\n    ));\n    continue;\n  }\n  deduped.push(candidate);\n}\n\nconst perTopicCounts = new Map();\nconst providerCounts = new Map();\nconst selected = [];\nfor (const candidate of deduped) {\n  const topicKey = normalizeText(candidate.row.source_topic);\n  const providerKey = compact(candidate.row.source_provider).toLowerCase();\n  const topicCount = perTopicCounts.get(topicKey) || 0;\n  const providerCount = providerCounts.get(providerKey) || 0;\n\n  if (topicCount >= TOPIC_CAP) {\n    candidate.rejectionReasons.push(buildReason(\n      'cap',\n      'topic_cap_reached',\n      'Blocked because this topic already reached the phase 4 queue cap.',\n      { topic_cap: TOPIC_CAP, topic: candidate.row.source_topic }\n    ));\n    continue;\n  }\n\n  if (providerKey === 'cj_dropshipping' && providerCount >= CJ_PROVIDER_CAP) {\n    candidate.rejectionReasons.push(buildReason(\n      'cap',\n      'provider_cap_reached',\n      'Blocked because the CJ provider cap was reached.',\n      { provider_cap: CJ_PROVIDER_CAP, source_provider: providerKey }\n    ));\n    continue;\n  }\n\n  if (providerKey === 'browserbase_marketplace' && providerCount >= BROWSERBASE_PROVIDER_CAP) {\n    candidate.rejectionReasons.push(buildReason(\n      'cap',\n      'provider_cap_reached',\n      'Blocked because the browserbase provider cap was reached.',\n      { provider_cap: BROWSERBASE_PROVIDER_CAP, source_provider: providerKey }\n    ));\n    continue;\n  }\n\n  if (selected.length >= TOTAL_CAP) {\n    candidate.rejectionReasons.push(buildReason(\n      'cap',\n      'total_cap_reached',\n      'Blocked because the overall phase 4 queue cap was reached.',\n      { total_cap: TOTAL_CAP }\n    ));\n    continue;\n  }\n\n  perTopicCounts.set(topicKey, topicCount + 1);\n  providerCounts.set(providerKey, providerCount + 1);\n  candidate.selected = true;\n  selected.push(candidate);\n}\n\nif (selected.length === 0) {\n  const fallbackPool = prepared\n    .filter((candidate) => {\n      if (hasTerminalRejection(candidate)) return false;\n      if (!hasOnlyScoreRejections(candidate)) return false;\n      if (!hasFallbackEvidence(candidate)) return false;\n      if (candidate.score < FALLBACK_MIN_SCORE) return false;\n      return true;\n    })\n    .sort((a, b) => b.score - a.score);\n\n  for (const candidate of fallbackPool) {\n    if (selected.length >= FALLBACK_MAX_ITEMS) break;\n    candidate.selected = true;\n    candidate.rejectionReasons = candidate.rejectionReasons.filter((reason) => reason.stage !== 'score');\n    candidate.rejectionReasons.push(buildReason(\n      'fallback',\n      'fallback_selected',\n      'Selected by fallback because strict phase 4 produced an empty queue.',\n      { score: candidate.score, fallback_min_score: FALLBACK_MIN_SCORE }\n    ));\n    selected.push(candidate);\n  }\n}\n\nconst selectedOutput = selected.map((candidate, index) => {\n  const selection = {\n    phase: 'phase4_candidate_selection',\n    topic_intent_type: candidate.context.topicIntentType,\n    confidence_score: candidate.score,\n    queue_rank: index + 1,\n    selected_at: new Date().toISOString(),\n    source_host: candidate.host || null,\n    dedupe_name_key: candidate.normalizedName || null,\n  };\n  return {\n    json: attachPayload(candidate, selection),\n  };\n});\n\nreturn selectedOutput;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2432,
+        1216
+      ],
+      "id": "p4sel-code-0001",
+      "name": "Phase 4 Candidate Selection",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Phase 4 - Candidate Selection\n\nMerge Review Sources still collects all normalized candidates, but Phase 4 now decides what reaches human review.\nIt computes a confidence score, filters weak or low-signal rows, removes near-duplicates,\nlimits per-topic/provider volume, and passes only the highest-confidence products into `private.hil_reviews`.",
+        "height": 484,
+        "width": 1560,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        1040
+      ],
+      "id": "p4sel-sticky-0001",
+      "name": "cluster:phase4-candidate-selection"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst CHAT_ID = '8243518279';\nconst MAX_CAPTION_LENGTH = 900;\n\nfunction compact(value) {\n  return String(value ?? '').replace(/\\s+/g, ' ').trim();\n}\n\nfunction escapeHtml(value) {\n  return compact(value)\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;');\n}\n\nfunction truncate(value, maxLength) {\n  const text = compact(value);\n  return text.length > maxLength ? text.slice(0, maxLength - 3) + '...' : text;\n}\n\nfunction money(row) {\n  const priceText = compact(row.price_text);\n  if (priceText) return priceText;\n  const numeric = Number(row.price_numeric);\n  if (!Number.isFinite(numeric)) return 'price n/a';\n  const currency = compact(row.currency).toUpperCase();\n  if (currency === 'INR') return 'INR ' + numeric;\n  return currency ? String(numeric) + ' ' + currency : String(numeric);\n}\n\nfunction rating(row) {\n  const value = Number(row.product_rating);\n  if (!Number.isFinite(value)) return 'rating n/a';\n  const reviews = Number(row.reviews_count);\n  return Number.isFinite(reviews) ? String(value) + '/5 (' + reviews + ')' : String(value) + '/5';\n}\n\nfunction source(row) {\n  return compact(row.marketplace || row.source_provider || 'source n/a');\n}\n\nfunction buildCallback(action, row) {\n  const payload = action + ':' + row.id + ':' + row.callback_token;\n  if (Buffer.byteLength(payload, 'utf8') > 64) {\n    throw new Error('Telegram callback payload is over 64 bytes for review ' + row.id);\n  }\n  return payload;\n}\n\nfunction buildCaption(row) {\n  const name = escapeHtml(truncate(row.product_name, 140));\n  const price = escapeHtml(money(row));\n  const score = row.raw_payload?.phase4_selection?.confidence_score ?? row.raw_payload?.phase4_debug?.score ?? null;\n  const scoreText = score == null ? '' : '\\nScore: <b>' + escapeHtml(score) + '</b>';\n  const lines = [\n    '<b>' + name + '</b>',\n    'Price: <b>' + price + '</b>',\n    'Rating: ' + escapeHtml(rating(row)),\n    'Source: ' + escapeHtml(source(row)),\n    'Topic: ' + escapeHtml(truncate(row.source_topic, 120)),\n    scoreText.trim(),\n  ].filter(Boolean);\n  return truncate(lines.join('\\n'), MAX_CAPTION_LENGTH);\n}\n\nreturn $input.all().map((item) => {\n  const row = item.json || {};\n  const caption = buildCaption(row);\n  const text = caption + '\\n\\nImage unavailable: sending text card.';\n  return {\n    json: {\n      ...row,\n      review_id: row.id,\n      telegram_chat_id: CHAT_ID,\n      telegram_caption: caption,\n      telegram_text: text,\n      telegram_file_name: 'hil-review-' + (row.id || 'item') + '.jpg',\n      telegram_approve_callback: buildCallback('a', row),\n      telegram_reject_callback: buildCallback('r', row),\n      telegram_skip_callback: buildCallback('s', row),\n      image_url: compact(row.image_url),\n    },\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3024,
+        1216
+      ],
+      "id": "p4tg-prep-0001",
+      "name": "Prepare Telegram Card",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.image_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; EL-HIL-Bot/1.0)"
+            },
+            {
+              "name": "Accept",
+              "value": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 5
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "product_image"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3248,
+        1072
+      ],
+      "id": "p4tg-download-0001",
+      "name": "Download Product Image",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "8243518279",
+        "binaryData": true,
+        "binaryPropertyName": "product_image",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Approve",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Prepare Telegram Card').item.json.telegram_approve_callback }}"
+                    }
+                  },
+                  {
+                    "text": "Reject",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Prepare Telegram Card').item.json.telegram_reject_callback }}"
+                    }
+                  },
+                  {
+                    "text": "Skip",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Prepare Telegram Card').item.json.telegram_skip_callback }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Open Product",
+                    "additionalFields": {
+                      "url": "={{ $('Prepare Telegram Card').item.json.product_url }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "caption": "={{ $('Prepare Telegram Card').item.json.telegram_caption }}",
+          "fileName": "={{ $('Prepare Telegram Card').item.json.telegram_file_name }}",
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3472,
+        1120
+      ],
+      "id": "p4tg-photo-0001",
+      "name": "Send HIL Telegram Photo",
+      "webhookId": "p4tg-photo-webhook-0001",
+      "credentials": {
+        "telegramApi": {
+          "id": "5w4zQqucsn6Vehh6",
+          "name": "EL-HIL-BOT"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE private.hil_reviews\nSET telegram_chat_id = $2::bigint,\n    telegram_message_id = $3::bigint,\n    telegram_media_status = 'sent',\n    telegram_sent_at = now(),\n    updated_at = now()\nWHERE id = $1::bigint\nRETURNING id, telegram_chat_id, telegram_message_id, telegram_media_status, telegram_sent_at;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ $('Prepare Telegram Card').item.json.review_id }},{{ $json.result.chat.id }},{{ $json.result.message_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3728,
+        1040
+      ],
+      "id": "p4tg-mark-photo-0001",
+      "name": "Mark Telegram Photo Sent",
+      "credentials": {
+        "postgres": {
+          "id": "Tx3i0fewZ8MM6LFt",
+          "name": "Supabase yatralounge (Dropship Memory)"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "chatId": "8243518279",
+        "text": "={{ $('Prepare Telegram Card').item.json.telegram_text }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Approve",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Prepare Telegram Card').item.json.telegram_approve_callback }}"
+                    }
+                  },
+                  {
+                    "text": "Reject",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Prepare Telegram Card').item.json.telegram_reject_callback }}"
+                    }
+                  },
+                  {
+                    "text": "Skip",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Prepare Telegram Card').item.json.telegram_skip_callback }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Open Product",
+                    "additionalFields": {
+                      "url": "={{ $('Prepare Telegram Card').item.json.product_url }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3472,
+        1328
+      ],
+      "id": "p4tg-text-0001",
+      "name": "Send HIL Telegram Text Fallback",
+      "webhookId": "p4tg-text-webhook-0001",
+      "credentials": {
+        "telegramApi": {
+          "id": "5w4zQqucsn6Vehh6",
+          "name": "EL-HIL-BOT"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE private.hil_reviews\nSET telegram_chat_id = $2::bigint,\n    telegram_message_id = $3::bigint,\n    telegram_media_status = 'text_only',\n    telegram_sent_at = now(),\n    updated_at = now()\nWHERE id = $1::bigint\nRETURNING id, telegram_chat_id, telegram_message_id, telegram_media_status, telegram_sent_at;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ $('Prepare Telegram Card').item.json.review_id }},{{ $json.result.chat.id }},{{ $json.result.message_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3696,
+        1328
+      ],
+      "id": "p4tg-mark-text-0001",
+      "name": "Mark Telegram Text Fallback",
+      "credentials": {
+        "postgres": {
+          "id": "Tx3i0fewZ8MM6LFt",
+          "name": "Supabase yatralounge (Dropship Memory)"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "content": "## Phase 4 - Telegram Card Delivery\n\nAfter `private.hil_reviews` upsert, this branch prepares a compact review card,\ndownloads the product image as binary, sends a Telegram photo through `EL-HIL-BOT`,\nand records Telegram delivery metadata. If image/photo delivery fails, it sends a text fallback.",
+        "height": 496,
+        "width": 1008,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3136,
+        912
+      ],
+      "id": "p4tg-sticky-0001",
+      "name": "cluster:phase4-telegram-delivery"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        3024,
+        1664
+      ],
+      "id": "p6tg-trigger-0001",
+      "name": "Telegram Trigger",
+      "webhookId": "p6tg-trigger-webhook-0001",
+      "credentials": {
+        "telegramApi": {
+          "id": "5w4zQqucsn6Vehh6",
+          "name": "EL-HIL-BOT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst ZERO_UUID = '00000000-0000-0000-0000-000000000000';\n\nfunction compact(value) {\n  return String(value ?? '').replace(/\\s+/g, ' ').trim();\n}\n\nfunction sanitizeParam(value, maxLength = 120) {\n  return compact(value)\n    .replace(/[,\\r\\n<>]/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .slice(0, maxLength);\n}\n\nfunction actorLabel(user) {\n  if (!user) return '';\n  if (user.username) return '@' + sanitizeParam(user.username, 64).replace(/^@+/, '');\n  const name = sanitizeParam([user.first_name, user.last_name].filter(Boolean).join(' '), 80);\n  return name || sanitizeParam(user.id, 40);\n}\n\nfunction parsePayload(data) {\n  const parts = compact(data).split(':');\n  const valid = parts.length === 3\n    && /^[ars]$/.test(parts[0])\n    && /^\\d{1,19}$/.test(parts[1])\n    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parts[2]);\n  return {\n    valid,\n    action_code: valid ? parts[0] : 'x',\n    review_id: valid ? parts[1] : '0',\n    callback_token: valid ? parts[2].toLowerCase() : ZERO_UUID,\n  };\n}\n\nreturn $input.all().map((item) => {\n  const update = item.json || {};\n  const callback = update.callback_query || {};\n  const from = callback.from || {};\n  const message = callback.message || {};\n  const chat = message.chat || {};\n  const parsed = parsePayload(callback.data);\n  const data = compact(callback.data);\n  return {\n    json: {\n      ...parsed,\n      callback_query_id: sanitizeParam(callback.id, 120),\n      callback_data: sanitizeParam(data, 80),\n      callback_payload_valid: parsed.valid,\n      actor_id: sanitizeParam(from.id, 40),\n      actor_label: actorLabel(from),\n      chat_id: sanitizeParam(chat.id, 40),\n      message_id: sanitizeParam(message.message_id, 40),\n      message_has_photo: Array.isArray(message.photo) && message.photo.length > 0,\n      message_text_preview: sanitizeParam(message.text || message.caption || '', 180),\n    },\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3248,
+        1664
+      ],
+      "id": "p6tg-parse-0001",
+      "name": "Parse HIL Callback",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "\nWITH payload AS (\n  SELECT\n    CASE $1::text\n      WHEN 'a' THEN 'approved'\n      WHEN 'r' THEN 'rejected'\n      WHEN 's' THEN 'skipped'\n      ELSE NULL\n    END AS target_status,\n    $1::text AS action_code,\n    $2::bigint AS review_id,\n    $3::uuid AS callback_token,\n    NULLIF($4::text, '') AS actor_id,\n    NULLIF($5::text, '') AS actor_label,\n    $6::text AS callback_query_id,\n    NULLIF($7::text, '')::bigint AS chat_id,\n    NULLIF($8::text, '')::bigint AS message_id,\n    $9::text AS callback_data\n),\nmatched AS (\n  SELECT h.*\n  FROM private.hil_reviews h\n  JOIN payload p\n    ON h.id = p.review_id\n   AND h.callback_token = p.callback_token\n),\nupdated AS (\n  UPDATE private.hil_reviews h\n  SET approval_status = p.target_status,\n      reviewed_by = COALESCE(p.actor_label, p.actor_id, 'telegram_user'),\n      reviewed_at = now(),\n      updated_at = now()\n  FROM payload p\n  WHERE h.id = p.review_id\n    AND h.callback_token = p.callback_token\n    AND h.approval_status = 'pending'\n    AND p.target_status IS NOT NULL\n  RETURNING h.id, h.approval_status, h.reviewed_by, h.reviewed_at\n),\ncallback_event AS (\n  INSERT INTO private.hil_review_events (\n    review_id,\n    event_type,\n    actor_type,\n    actor_id,\n    payload\n  )\n  SELECT\n    m.id,\n    'callback_received',\n    'telegram_user',\n    p.actor_id,\n    jsonb_build_object(\n      'action_code', p.action_code,\n      'target_status', p.target_status,\n      'callback_query_id', p.callback_query_id,\n      'chat_id', p.chat_id,\n      'message_id', p.message_id,\n      'callback_data', p.callback_data,\n      'was_pending', m.approval_status = 'pending'\n    )\n  FROM matched m\n  CROSS JOIN payload p\n  WHERE p.target_status IS NOT NULL\n  RETURNING id\n),\naction_event AS (\n  INSERT INTO private.hil_review_events (\n    review_id,\n    event_type,\n    actor_type,\n    actor_id,\n    payload\n  )\n  SELECT\n    u.id,\n    u.approval_status,\n    'telegram_user',\n    p.actor_id,\n    jsonb_build_object(\n      'callback_query_id', p.callback_query_id,\n      'chat_id', p.chat_id,\n      'message_id', p.message_id,\n      'reviewed_by', u.reviewed_by,\n      'reviewed_at', u.reviewed_at\n    )\n  FROM updated u\n  CROSS JOIN payload p\n  RETURNING id\n)\nSELECT\n  COALESCE(u.id, m.id, p.review_id) AS review_id,\n  p.callback_query_id,\n  p.chat_id,\n  p.message_id,\n  COALESCE(u.approval_status, m.approval_status, 'invalid') AS approval_status,\n  COALESCE(u.reviewed_by, m.reviewed_by, p.actor_label, p.actor_id, 'telegram_user') AS reviewed_by,\n  COALESCE(u.reviewed_at, m.reviewed_at, now()) AS reviewed_at,\n  (u.id IS NOT NULL) AS message_should_finalize,\n  CASE\n    WHEN p.target_status IS NULL THEN 'Invalid review action.'\n    WHEN u.id IS NOT NULL THEN initcap(u.approval_status) || ' recorded.'\n    WHEN m.id IS NOT NULL THEN 'Already reviewed: ' || m.approval_status || '.'\n    ELSE 'Review token is invalid or expired.'\n  END AS callback_answer_text,\n  CASE\n    WHEN u.id IS NOT NULL THEN\n      '<b>Review ' || u.approval_status || '</b>' ||\n      E'\\nID: <code>' || u.id::text || '</code>' ||\n      E'\\nBy: ' || COALESCE(u.reviewed_by, 'telegram_user')\n    ELSE NULL\n  END AS telegram_edit_text\nFROM payload p\nLEFT JOIN matched m ON true\nLEFT JOIN updated u ON true;\n",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ $json.action_code }},{{ $json.review_id }},{{ $json.callback_token }},{{ $json.actor_id }},{{ $json.actor_label }},{{ $json.callback_query_id }},{{ $json.chat_id }},{{ $json.message_id }},{{ $json.callback_data }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3472,
+        1664
+      ],
+      "id": "p6tg-apply-0001",
+      "name": "Apply HIL Callback",
+      "credentials": {
+        "postgres": {
+          "id": "Tx3i0fewZ8MM6LFt",
+          "name": "Supabase yatralounge (Dropship Memory)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $('Apply HIL Callback').item.json.callback_query_id }}",
+        "additionalFields": {
+          "cache_time": 0,
+          "show_alert": false,
+          "text": "={{ $('Apply HIL Callback').item.json.callback_answer_text }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3696,
+        1664
+      ],
+      "id": "p6tg-answer-0001",
+      "name": "Answer HIL Callback",
+      "webhookId": "eb040dd5-51ee-47c9-a854-092516931880",
+      "credentials": {
+        "telegramApi": {
+          "id": "5w4zQqucsn6Vehh6",
+          "name": "EL-HIL-BOT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "callback-finalized-review",
+              "leftValue": "={{ $('Apply HIL Callback').item.json.message_should_finalize ? 1 : 0 }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3920,
+        1664
+      ],
+      "id": "p6tg-if-finalized-0001",
+      "name": "If Callback Finalized Review"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Apply HIL Callback').item.json.chat_id }}",
+        "messageId": "={{ $('Apply HIL Callback').item.json.message_id }}",
+        "text": "={{ $('Apply HIL Callback').item.json.telegram_edit_text }}",
+        "additionalFields": {
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4144,
+        1568
+      ],
+      "id": "p6tg-edit-0001",
+      "name": "Edit HIL Review Message",
+      "webhookId": "8d9a34f5-bafd-4762-befe-67e08b1d1bfb",
+      "credentials": {
+        "telegramApi": {
+          "id": "5w4zQqucsn6Vehh6",
+          "name": "EL-HIL-BOT"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "\nINSERT INTO private.hil_review_events (\n  review_id,\n  event_type,\n  actor_type,\n  actor_id,\n  payload\n)\nVALUES (\n  $1::bigint,\n  'message_edited',\n  'workflow',\n  'workflow',\n  jsonb_build_object(\n    'method', 'editMessageText',\n    'chat_id', $2::bigint,\n    'message_id', $3::bigint,\n    'callback_query_id', $4::text\n  )\n)\nRETURNING id, review_id, event_type, event_at;\n",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ $('Apply HIL Callback').item.json.review_id }},{{ $('Apply HIL Callback').item.json.chat_id }},{{ $('Apply HIL Callback').item.json.message_id }},{{ $('Apply HIL Callback').item.json.callback_query_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4368,
+        1504
+      ],
+      "id": "p6tg-log-edit-0001",
+      "name": "Log HIL Message Edited",
+      "credentials": {
+        "postgres": {
+          "id": "Tx3i0fewZ8MM6LFt",
+          "name": "Supabase yatralounge (Dropship Memory)"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "deleteMessage",
+        "chatId": "={{ $('Apply HIL Callback').item.json.chat_id }}",
+        "messageId": "={{ $('Apply HIL Callback').item.json.message_id }}"
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4368,
+        1648
+      ],
+      "id": "p6tg-delete-0001",
+      "name": "Delete HIL Review Message After Edit Failure",
+      "webhookId": "806aeb72-e78f-4b67-9af0-ada0fa78b380",
+      "credentials": {
+        "telegramApi": {
+          "id": "5w4zQqucsn6Vehh6",
+          "name": "EL-HIL-BOT"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "\nINSERT INTO private.hil_review_events (\n  review_id,\n  event_type,\n  actor_type,\n  actor_id,\n  payload\n)\nVALUES (\n  $1::bigint,\n  'message_edited',\n  'workflow',\n  'workflow',\n  jsonb_build_object(\n    'method', 'deleteMessageAfterEditFailure',\n    'chat_id', $2::bigint,\n    'message_id', $3::bigint,\n    'callback_query_id', $4::text\n  )\n)\nRETURNING id, review_id, event_type, event_at;\n",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ $('Apply HIL Callback').item.json.review_id }},{{ $('Apply HIL Callback').item.json.chat_id }},{{ $('Apply HIL Callback').item.json.message_id }},{{ $('Apply HIL Callback').item.json.callback_query_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4592,
+        1648
+      ],
+      "id": "p6tg-log-delete-0001",
+      "name": "Log HIL Message Deleted",
+      "credentials": {
+        "postgres": {
+          "id": "Tx3i0fewZ8MM6LFt",
+          "name": "Supabase yatralounge (Dropship Memory)"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "content": "## Phase 6 - Telegram Callback Review\n\nReview cards now carry compact inline callback payloads: `a:<review_id>:<callback_token>`, `r:<review_id>:<callback_token>`, and `s:<review_id>:<callback_token>`.\nThe callback branch validates the row/token, updates only pending reviews, writes review events, answers Telegram, and finalizes the original message by editing text or deleting the photo card if Telegram cannot edit it.",
+        "height": 420,
+        "width": 1696,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2976,
+        1488
+      ],
+      "id": "p6tg-sticky-0001",
+      "name": "cluster:phase6-telegram-callbacks"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT category, alpha::float8 AS alpha, beta::float8 AS beta FROM private.bcc_posteriors;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1344,
+        -160
+      ],
+      "id": "bcc-read-0001",
+      "name": "Read BCC Posteriors",
+      "credentials": {
+        "postgres": {
+          "id": "Tx3i0fewZ8MM6LFt",
+          "name": "Supabase yatralounge (Dropship Memory)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// BCC-HIL: blend Phase 4 raw score with per-category Beta posterior.\n//   cal = w * mu + (1 - w) * (raw/100)   where  w = n / (n + N0),  n = a + b - 2.\n// Cold-start (a = b = 1) gives n = 0 -> w = 0 -> cal = raw/100 (identity).\n// Reorders selected items by calibrated score and re-stamps queue_rank.\nconst N0 = 5.0;\n\nconst post = {};\nfor (const it of $('Read BCC Posteriors').all()) {\n  const r = (it && it.json) || {};\n  if (r.category) post[String(r.category).toLowerCase()] = { a: Number(r.alpha), b: Number(r.beta) };\n}\n\nfunction pickCategory(row, rp) {\n  const cands = [\n    rp && rp.suggested_categories && rp.suggested_categories[0],\n    rp && rp.category,\n    rp && rp.phase1_category,\n    row.category,\n  ];\n  for (const c of cands) {\n    if (c) return String(c).toLowerCase();\n  }\n  return 'uncategorized';\n}\n\nconst items = $input.all();\nconst out = [];\nfor (const item of items) {\n  const row = (item && item.json) || {};\n  let rp = row.raw_payload;\n  if (typeof rp === 'string') {\n    try { rp = JSON.parse(rp); } catch (e) { rp = {}; }\n  }\n  rp = rp || {};\n  const sel = rp.phase4_selection || {};\n  const raw = Number(sel.confidence_score || 0);\n  const cat = pickCategory(row, rp);\n  const p = post[cat] || { a: 1.0, b: 1.0 };\n  const a = p.a, b = p.b;\n  const n = Math.max(0, a + b - 2);\n  const w = n / (n + N0);\n  const mu = a / (a + b);\n  const norm = Math.max(0, Math.min(1, raw / 100));\n  const cal = w * mu + (1 - w) * norm;\n  rp.phase4_selection = Object.assign({}, sel, {\n    bcc_category: cat,\n    bcc_raw_score: raw,\n    bcc_calibrated_score: cal,\n    bcc_posterior: { alpha: a, beta: b, mu: mu, w: w, n0: N0 },\n  });\n  out.push({\n    json: Object.assign({}, row, { raw_payload: JSON.stringify(rp), bcc_calibrated_score: cal }),\n  });\n}\n\nout.sort(function (x, y) {\n  return (y.json.bcc_calibrated_score || 0) - (x.json.bcc_calibrated_score || 0);\n});\n\nfor (let i = 0; i < out.length; i++) {\n  let rp = out[i].json.raw_payload;\n  try { rp = JSON.parse(rp); } catch (e) { rp = {}; }\n  rp.phase4_selection = Object.assign({}, rp.phase4_selection || {}, { queue_rank: i + 1 });\n  out[i].json.raw_payload = JSON.stringify(rp);\n}\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        1216
+      ],
+      "id": "bcc-cal-0001",
+      "name": "BCC Calibrate Selection",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH cat AS (\n  SELECT lower(coalesce(raw_payload->>'category','')) AS category,\n         approval_status\n  FROM private.hil_reviews\n  WHERE id = $1::bigint\n)\nINSERT INTO private.bcc_posteriors (category, alpha, beta, updated_at)\nSELECT category,\n       1.0 + CASE WHEN approval_status='approved' THEN 1.0 ELSE 0.0 END,\n       1.0 + CASE WHEN approval_status='rejected' THEN 1.0 ELSE 0.0 END,\n       now()\nFROM cat\nWHERE category <> '' AND approval_status IN ('approved','rejected')\nON CONFLICT (category) DO UPDATE\nSET alpha = bcc_posteriors.alpha + CASE WHEN EXCLUDED.alpha > 1.0 THEN 1.0 ELSE 0.0 END,\n    beta  = bcc_posteriors.beta  + CASE WHEN EXCLUDED.beta  > 1.0 THEN 1.0 ELSE 0.0 END,\n    updated_at = now()\nRETURNING category, alpha::float8 AS alpha, beta::float8 AS beta;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ $('Apply HIL Callback').item.json.review_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3696,
+        1856
+      ],
+      "id": "bcc-upd-0001",
+      "name": "Update BCC Posterior",
+      "credentials": {
+        "postgres": {
+          "id": "Tx3i0fewZ8MM6LFt",
+          "name": "Supabase yatralounge (Dropship Memory)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 24 Hours": {
+      "main": [
+        [
+          {
+            "node": "YouTube Trending IN",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read BCC Posteriors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Trending IN": {
+      "main": [
+        [
+          {
+            "node": "Fetch . Score . Dedupe . Rank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch . Score . Dedupe . Rank": {
+      "main": [
+        [
+          {
+            "node": "Create Day Tab",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Sheet Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare JSON File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter Top 30",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Curated Picks Tab",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Day Tab": {
+      "main": [
+        []
+      ]
+    },
+    "Prepare Sheet Rows": {
+      "main": [
+        [
+          {
+            "node": "Write Rows to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare JSON File": {
+      "main": [
+        [
+          {
+            "node": "Drive Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Top 30": {
+      "main": [
+        [
+          {
+            "node": "Dropship AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dropship AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Agent Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Agent Output": {
+      "main": [
+        [
+          {
+            "node": "Write Curated Picks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "CJ Get Token",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Search Query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Tavily Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Dropship AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Dropship AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tavily Search": {
+      "ai_tool": [
+        [
+          {
+            "node": "Dropship AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Curated Picks": {
+      "main": [
+        []
+      ]
+    },
+    "Build Search Query": {
+      "main": [
+        [
+          {
+            "node": "CJ Product List",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ Product List": {
+      "main": [
+        [
+          {
+            "node": "Pick Top 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Top 3": {
+      "main": [
+        [
+          {
+            "node": "Merge Sources",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Normalize CJ Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Day Tab (Scraped)": {
+      "main": [
+        []
+      ]
+    },
+    "Prepare Sheet Rows (Scraped)": {
+      "main": [
+        [
+          {
+            "node": "Sheet Append (Scraped)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bundle JSON (Scraped)": {
+      "main": [
+        [
+          {
+            "node": "Drive Upload (Scraped)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ Get Token": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Formatter": {
+      "main": [
+        [
+          {
+            "node": "Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Sources": {
+      "main": [
+        [
+          {
+            "node": "Create Day Tab (Scraped)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Sheet Rows (Scraped)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Bundle JSON (Scraped)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Supabase Insert (Scraped)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Tavily Query": {
+      "main": [
+        [
+          {
+            "node": "Tavily Search (IN Market)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tavily Search (IN Market)": {
+      "main": [
+        [
+          {
+            "node": "Pick Indian Listings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Indian Listings": {
+      "main": [
+        [
+          {
+            "node": "If Tavily Content Thin",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Tavily Content Thin": {
+      "main": [
+        [
+          {
+            "node": "Browserbase Fetch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Gemini Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Browserbase Fetch": {
+      "main": [
+        [
+          {
+            "node": "Strip HTML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strip HTML": {
+      "main": [
+        [
+          {
+            "node": "Prepare Gemini Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Extract Product": {
+      "main": [
+        [
+          {
+            "node": "Normalize Browserbase Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize CJ Review": {
+      "main": [
+        [
+          {
+            "node": "Merge Review Sources",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Browserbase Review": {
+      "main": [
+        [
+          {
+            "node": "Merge Review Sources",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Review Sources": {
+      "main": [
+        [
+          {
+            "node": "Phase 4 Candidate Selection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Gemini Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini Extract Product",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 4 Candidate Selection": {
+      "main": [
+        [
+          {
+            "node": "BCC Calibrate Selection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Insert (HIL Reviews)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Telegram Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Telegram Card": {
+      "main": [
+        [
+          {
+            "node": "Download Product Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Product Image": {
+      "main": [
+        [
+          {
+            "node": "Send HIL Telegram Photo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send HIL Telegram Text Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send HIL Telegram Photo": {
+      "main": [
+        [
+          {
+            "node": "Mark Telegram Photo Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send HIL Telegram Text Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send HIL Telegram Text Fallback": {
+      "main": [
+        [
+          {
+            "node": "Mark Telegram Text Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse HIL Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse HIL Callback": {
+      "main": [
+        [
+          {
+            "node": "Apply HIL Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply HIL Callback": {
+      "main": [
+        [
+          {
+            "node": "Answer HIL Callback",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update BCC Posterior",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer HIL Callback": {
+      "main": [
+        [
+          {
+            "node": "If Callback Finalized Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Callback Finalized Review": {
+      "main": [
+        [
+          {
+            "node": "Edit HIL Review Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit HIL Review Message": {
+      "main": [
+        [
+          {
+            "node": "Log HIL Message Edited",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete HIL Review Message After Edit Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete HIL Review Message After Edit Failure": {
+      "main": [
+        [
+          {
+            "node": "Log HIL Message Deleted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BCC Calibrate Selection": {
+      "main": [
+        [
+          {
+            "node": "Supabase Insert (HIL Reviews)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "rE91gItDFzMp368P",
+    "availableInMCP": true
+  },
+  "versionId": "1fab99f6-c940-4a78-94a5-27c1a0eaad97",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3d2b5041caa95b008a732c4fd0cc085c6c058f8f1eaa263f813a26ec92278c40"
+  },
+  "id": "298f3JSOE72nhW59",
+  "tags": []
+}

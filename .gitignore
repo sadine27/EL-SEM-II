@@ -1,23 +1,31 @@
-# Byte-compiled / optimized / DLL files
+# Environment variables (never commit)
+.env
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Environment variables
-.env
-
-# n8n secrets (workflow file is safe to commit - no hardcoded keys)
-# el_workflow.json
-
-# Local output and logs
+# Local pipeline output & logs
 output/
 *.log
 
-# Project analysis
+# LaTeX build artifacts (paper/main.pdf is committed; intermediate files are not)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.toc
+*.synctex.gz
+
+# Tool caches / IDE
 graphify-out/
 .claude/
 .gemini/
+.aider*
 
-# OS generated files
+# OS generated
 .DS_Store
 Thumbs.db
