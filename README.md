@@ -1,15 +1,21 @@
-# EL-SEM-II — Trending India Dropshipping Pipeline
+# EL Pipeline — India Dropshipping Intelligence
 
 > **College Project · EL (Emerging Lab) — II Semester**  
-> Part 1 of a full SaaS dropshipping intelligence pipeline for the Indian market.
+> A fully automated, AI-powered dropshipping product intelligence pipeline for the Indian market, running on N8N Cloud.
 
 ---
 
 ## 📌 Overview
 
-This project fetches **real-time trending topics from India** across three sources, scores them for **product-purchase intent**, deduplicates and ranks them, then exports structured JSON consumed by the downstream ad-spy and Shopify automation stages.
+Every 24 hours this pipeline automatically:
+1. **Aggregates** trending topics from YouTube, Google Trends, and Google News (India)
+2. **Scores & ranks** topics by product-purchase intent using a heuristic algorithm
+3. **Curates** the top 10 dropshipping opportunities via a Gemini 2.5 Flash AI agent (with Tavily web search + persistent Postgres memory)
+4. **Scrapes** real supplier products from CJ Dropshipping for each AI-curated pick
+5. **Stores** everything in Google Sheets (daily tabs), Google Drive (JSON archives), and Supabase (database)
+6. **Alerts** the developer on Telegram if any step fails
 
-The pipeline is designed to run daily — both **locally via Python** and **automatically via an N8N Cloud workflow**.
+The entire pipeline runs serverlessly on N8N Cloud — no local Python required.
 
 ---
 
@@ -17,195 +23,176 @@ The pipeline is designed to run daily — both **locally via Python** and **auto
 
 ```
 EL-SEM-II/
-├── trending_india_pipeline.py   # Main Python pipeline script (Part 1)
-├── el_workflow.json             # N8N Cloud automation workflow (daily trigger)
-├── INSTRUCTIOSN-1.txt           # Original build specification / prompt
-├── Saas-PNG.png                 # Full SaaS pipeline flowchart (image)
-├── Saas.pdf                     # Full SaaS pipeline flowchart (PDF)
-├── .gitignore                   # Excludes .env, output/, logs, cache
-└── README.md                    # This file
+├── EL.json                   # Live N8N pipeline workflow (import to restore)
+├── el_error_handler.json     # N8N error-alert workflow (Telegram alerts on crash)
+├── sync_workflows.js         # Utility: exports latest workflows from N8N to this repo
+├── .env                      # Local credentials (never committed — see .gitignore)
+├── data/
+│   └── sample_phase1_run.json
+├── docs/
+│   ├── instructions_phase1.txt
+│   ├── architecture_flowchart.pdf
+│   ├── el_report_content.txt
+│   ├── el_report_content.docx
+│   └── legacy/
+│       ├── Saas-PNG.png
+│       └── Saas.pdf
+└── README.md                 # This file
 ```
 
 ---
 
-## 🔧 Data Sources
+## 🏗️ Pipeline Architecture (3 Phases)
 
-| Priority | Source | Method |
-|----------|--------|--------|
-| 1st | Google Trends (Realtime) | `pytrends-modern` → `realtime_trending_searches(pn='IN')` |
-| 2nd | Google Trends (Daily) | `pytrends-modern` → `trending_searches(pn='india')` |
-| 3rd | YouTube Data API v3 | `googleapis.com/youtube/v3/videos?chart=mostPopular&regionCode=IN` |
-| 4th | Google News RSS | `news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en` |
+```
+⏰ Schedule Trigger (Every 24 Hours)
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│  PHASE 1 — Trend Aggregation & Scoring      │
+│                                             │
+│  YouTube Data API v3 (top 50 IN videos)     │
+│  + Google Trends RSS (daily, geo=IN)        │
+│  + Google News RSS (top 100, India)         │
+│        │                                    │
+│  → Score by purchase intent (0.0–1.0)       │
+│  → Deduplicate (>70% word overlap)          │
+│  → Rank by score                            │
+│        │                                    │
+│  ├── Google Sheets (daily tab)              │
+│  └── Google Drive (trending JSON archive)   │
+└─────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│  PHASE 2 — AI Curation                     │
+│                                             │
+│  Gemini 2.5 Flash Agent                    │
+│  + Tavily web search tool                  │
+│  + Postgres memory (cross-run context)     │
+│        │                                    │
+│  → Picks top 10 dropshipping opportunities │
+│  → Outputs: topic, score, reason,          │
+│    product type, target audience           │
+│        │                                    │
+│  └── Google Sheets ("Curated Picks" tab)   │
+└─────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│  PHASE 3 — Supplier Product Scraping       │
+│                                             │
+│  CJ Dropshipping API                       │
+│  → Search by keyword (from AI picks)       │
+│  → Pick top 3 products per keyword         │
+│    (ranked by listedNum = seller demand)   │
+│        │                                    │
+│  ├── Google Sheets (scraped products tab)  │
+│  ├── Google Drive (products JSON archive)  │
+│  └── Supabase (upsert → scraped_products)  │
+└─────────────────────────────────────────────┘
+        │
+        ▼ (on any critical node failure)
+┌─────────────────────────────────────────────┐
+│  ERROR HANDLER                             │
+│  → Error Formatter (node name + message)   │
+│  → Telegram alert to developer             │
+└─────────────────────────────────────────────┘
+```
 
 ---
 
-## 🏗️ Architecture — `TrendingIndiaPipeline` Class
+## 🔑 Credentials & Services
 
-```
-TrendingIndiaPipeline
-├── fetch_pytrends_realtime()    → Google Trends realtime topics
-├── fetch_pytrends_daily()       → Google Trends daily hot searches
-├── fetch_youtube_trending()     → YouTube top-50 videos (API)
-├── fetch_google_news_rss()      → Google News top-100 titles
-├── expand_related_queries()     → pytrends related queries (rate-limited, max 40 calls)
-├── score_product_intent()       → Tiered heuristic score (0.0–1.0)
-├── map_categories()             → 13-category keyword mapper
-├── deduplicate()                → >70% word-overlap merge
-├── run()                        → Orchestrator → fetch → enrich → dedup → rank
-└── export_json()                → Writes trending_india_YYYY-MM-DD.json
-```
+| Service | Purpose | N8N Credential Name |
+|---------|---------|---------------------|
+| YouTube Data API v3 | Trending videos (Phase 1) | `YouTube API Key` |
+| Google Sheets OAuth | Write trend data + picks | `sharma divyesh api` |
+| Google Drive OAuth | Archive JSON exports | `sharma divyesh` |
+| Gemini API | AI curation agent (Phase 2) | `Gemini API Key (EL pipeline)` |
+| Tavily API | Web search tool for agent | *(inline in Code node)* |
+| CJ Dropshipping API | Supplier product catalog | *(email + API key inline)* |
+| Supabase (Postgres) | Product DB + agent memory | `Supabase yatralounge (Dropship Memory)` |
+| Telegram Bot | Developer error alerts | `EL-DEVELOPER-ALERT` |
 
 ---
 
-## 📊 Output Schema
+## 📊 Storage / Outputs
 
-```json
-{
-  "metadata": {
-    "scraped_at": "<ISO timestamp>",
-    "geo": "IN",
-    "total_topics": 123,
-    "sources": ["google_trends_realtime", "google_trends_daily", "youtube_trending"]
-  },
-  "trends": [
-    {
-      "rank": 1,
-      "topic": "wireless earbuds",
-      "traffic_estimate": "500K+",
-      "source": "google_trends_realtime",
-      "related_queries": ["best earbuds under 1000", "buy earbuds online"],
-      "product_intent_score": 0.75,
-      "suggested_categories": ["electronics", "accessories"]
-    }
-  ]
-}
-```
+| What | Where | Format |
+|------|-------|--------|
+| All ranked trends | Google Sheet `1WVIWkLHZkNw4mqUQwnUy0j2k_5eogREcCfPySzRLn2A` → tab `YYYY-MM-DD` | Rows: rank, topic, score, source, categories |
+| AI curated picks | Same sheet → `Curated Picks` tab | Rows: rank, topic, score, reason, product type |
+| Raw trends archive | Google Drive folder `1M0FRJeZ6uguJSfmheWwU8hwiZe_tjVja` | `trending_india_YYYY-MM-DD.json` |
+| Scraped products | Google Sheet `1lLmPtyewS6SoCsgO4hwu9qOz1eUh_gVMEYuFa-IiieQ` → tab `YYYY-MM-DD` | Product name, URL, price, images, supplier |
+| Scraped products archive | Google Drive folder `1jihlrDk1iKxGO7v4VChrEhPphaBPfvhx` | `scraped_products_YYYY-MM-DD.json` |
+| Products database | Supabase → `scraped_products` table | Full product data, upserted by URL + topic |
+| Agent memory | Supabase → `n8n_dropship_memory` table | Gemini cross-run conversation history |
 
 ---
 
-## 🎯 Product Intent Scoring (Heuristic, No AI)
+## 🚨 Error Handling
 
-Scores topics 0.0–1.0 based on keyword matching across three tiers:
+Two-layer error handling, zero manual intervention needed:
 
-| Tier | Weight | Examples |
-|------|--------|---------|
-| **T1** — Immediate Transactional | +0.30 | `buy`, `price`, `cod`, `discount`, `sale`, `flash sale` |
-| **T2** — Commercial Investigation | +0.15 | `review`, `best`, `buying guide`, `top 10`, `comparison` |
-| **T3** — Trust / Urgency Signals | +0.10 | `wireless`, `new`, `trending`, `restock`, `pre-order` |
-| **Negative** — Informational / DIY | -0.20 | `how to`, `tutorial`, `diy`, `repair`, `free download` |
+### Layer 1 — Per-node (inline)
+Critical nodes use `onError: continueErrorOutput`. On failure:
+- **Error Formatter** formats: node name + error message + IST timestamp + execution link
+- **Telegram Alert** sends to developer chat instantly
+
+| Node | Error Behaviour |
+|------|----------------|
+| Fetch · Score · Dedupe · Rank | Alert → stop phase |
+| Filter Top 30 | Alert → stop phase |
+| Dropship AI Agent | Alert → stop phase |
+| Parse Agent Output | Alert → stop phase |
+| CJ Get Token | Alert → stop phase |
+| Build Search Query | Alert → stop phase |
+| Pick Top 3 | Alert → stop phase |
+| YouTube Trending IN | Silent continue (Trends + News still run) |
+| All storage nodes | Silent continue (`continueOnFail: true`) |
+
+### Layer 2 — Workflow-level crash
+`EL Error Handler` workflow (linked via `errorWorkflow` setting) catches any complete execution crash and sends a Telegram alert with execution URL.
 
 ---
 
-## 🏷️ Category Mapping (13 Categories)
+## 🔄 Syncing Workflows to Repo
 
-`electronics` · `fashion` · `home` · `fitness` · `beauty` · `accessories` · `automotive` · `baby_and_kids` · `pets` · `office_and_stationery` · `health_and_medical` · `tools_and_hardware` · `grocery_and_food`
+After making changes in N8N UI, export to keep this repo in sync:
+```bash
+node sync_workflows.js
+```
+This overwrites `EL.json` and `el_error_handler.json` with the latest live state.
 
 ---
 
-## 🤖 N8N Automation Workflow (`el_workflow.json`)
+## 🔁 Restoring Workflows to N8N
 
-The workflow mirrors the Python pipeline and runs automatically every 24 hours on N8N Cloud.
-
-```
-Every 24 Hours (Schedule Trigger)
-        ↓
-YouTube Trending IN (HTTP Request node)
-  → Uses "YouTube API Key" N8N Credential (no hardcoded keys)
-        ↓
-Fetch · Score · Dedupe · Rank (Code node)
-  → Fetches Google Trends RSS + Google News RSS
-  → Scores, deduplicates, ranks all topics
-  → Returns structured JSON payload
-```
-
-### Importing into N8N Cloud
 1. Go to [n8n.cloud](https://n8n.cloud) → **Workflows** → **Import from file**
-2. Upload `el_workflow.json`
-3. Create an N8N Credential:
-   - **Type:** `HTTP Query Auth`
-   - **Name:** `YouTube API Key`
-   - **Query Param Name:** `key`
-   - **Value:** *(your YouTube Data API v3 key)*
-4. Activate the workflow ✅
+2. Import `EL.json` (main pipeline)
+3. Import `el_error_handler.json` (error alerts)
+4. Recreate credentials from `.env` values (see table above)
+5. Activate both workflows ✅
 
 ---
 
-## 🚀 Running Locally
+## 🗺️ Broader SaaS Pipeline Context
 
-### Prerequisites
-```bash
-pip install pytrends-modern feedparser requests python-dotenv
-```
-
-### Environment Variables
-Create a `.env` file in the project root:
-```env
-YOUTUBE_API_KEY="your_youtube_data_api_v3_key_here"
-```
-
-> ⚠️ **Never commit `.env` to version control.** It is excluded via `.gitignore`.
-
-### Run
-```bash
-python trending_india_pipeline.py
-```
-
-Output is saved to `./output/trending_india_YYYY-MM-DD.json`.  
-Errors are logged to `./output/pipeline_errors_YYYY-MM-DD.log`.
-
----
-
-## ⚙️ Configuration
-
-Edit the `CONFIG` dict at the top of `trending_india_pipeline.py`:
-
-```python
-CONFIG = {
-    "geo": "IN",
-    "language": "en-IN",
-    "max_topics": 1000,
-    "request_delay_seconds": 5,      # delay between pytrends calls (rate-limit)
-    "youtube_max_results": 50,
-    "rss_max_entries": 100,
-    "min_product_intent_score": 0.0,  # 0.0 = include all topics
-    "max_related_expansions": 40,     # cap pytrends related_queries API calls
-    "output_dir": "./output"
-}
-```
-
----
-
-## 🗺️ Broader SaaS Pipeline (Context)
-
-This repo covers **Part 1** of a larger multi-stage pipeline:
+This repo is the **core automation layer** of a larger pipeline:
 
 ```
-[Part 1 — This Repo]
-Trending India Pipeline → Scored & Ranked JSON
+[This Repo — N8N Automation]
+Trending India Pipeline → AI Curation → CJ Product Scraping
         ↓
-[Part 2] Ad-Spy (Selenium) → Product research from trending topics
+[Future] Shopify API → Auto-list products to store
         ↓
-[Part 3] Google Gemini Filter → Refine & score products
+[Future] Ad automation → Facebook / Google Ads
         ↓
-[Part 4] Shopify API → Auto-list products to store
-        ↓
-[Part 5] CRM / Notifications → Email, Google Sheets, archive
+[Future] CRM / Customer notifications
 ```
 
-See `Saas.pdf` / `Saas-PNG.png` for the full pipeline flowchart.
-
----
-
-## 📋 Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `pytrends-modern` | Google Trends data (realtime + daily) |
-| `feedparser` | Google News RSS parsing |
-| `requests` | YouTube API HTTP calls |
-| `python-dotenv` | Load API keys from `.env` |
-
-> All dependencies are **auto-installed** at runtime if missing — no manual pip install required.
+See `docs/architecture_flowchart.pdf` and `docs/legacy/Saas.pdf` / `docs/legacy/Saas-PNG.png` for the full architecture.
 
 ---
 

@@ -1,0 +1,89 @@
+{
+  "id": "rE91gItDFzMp368P",
+  "name": "EL Error Handler",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "el-err-trigger-001",
+      "name": "EL Workflow Error",
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ],
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1
+    },
+    {
+      "id": "el-err-fmt-001",
+      "name": "Format Error Message",
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\n// n8n errorTrigger payload shape:\n//   d.execution.error.message / .node.name / .node.type\n//   d.execution.id, d.workflow.id, d.workflow.name\nconst err     = d?.execution?.error || {};\nconst nodeName = err?.node?.name || err?.nodeName || 'Unknown Node';\nconst msg      = (err?.message || err?.description || JSON.stringify(err)).substring(0, 400);\nconst ts       = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });\nconst wfId     = d?.workflow?.id || '298f3JSOE72nhW59';\nconst execId   = d?.execution?.id || '';\nconst url      = execId\n  ? `https://divyesh-sharma.app.n8n.cloud/workflow/${wfId}/executions/${execId}`\n  : `https://divyesh-sharma.app.n8n.cloud/workflow/${wfId}/executions`;\n\nconst text = `🚨 *EL Node Failed*\\n\\n❌ *Node:* ${nodeName}\\n📋 *Error:* ${msg}\\n🕐 *Time (IST):* ${ts}\\n🔗 [View Execution](${url})`;\nreturn [{ json: { text } }];"
+      },
+      "position": [
+        300,
+        0
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "telegramApi": {
+          "id": "tYvc8FQNBsrDMAYj",
+          "name": "EL-DEVELOPER-ALERT"
+        }
+      },
+      "id": "el-err-telegram-001",
+      "name": "Alert Developer",
+      "parameters": {
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        },
+        "chatId": "8243518279",
+        "text": "={{ $json.text }}"
+      },
+      "position": [
+        600,
+        0
+      ],
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "webhookId": "6bc59f7b-b0c0-45f3-a183-4c366b4c05b1"
+    }
+  ],
+  "connections": {
+    "EL Workflow Error": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Format Error Message",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Format Error Message": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Alert Developer",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null
+}

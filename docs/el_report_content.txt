@@ -1,0 +1,320 @@
+﻿Introduction
+
+Problem Definition
+
+Problem Statement:
+
+The EL project addresses the difficulty of finding dropshipping products that are actually connected to current Indian market demand. Manual product research usually depends on scattered sources such as YouTube trends, news, marketplace searches and supplier catalogues. This makes the process slow, inconsistent and difficult to repeat every day.
+
+Our solution is an automated n8n workflow named EL. It collects trending topics from India, scores them for product-purchase intent, uses an AI agent to curate dropshipping opportunities, searches supplier and marketplace sources, and stores the results for review. A separate EL Error Handler workflow monitors failures and alerts the developer through Telegram.
+
+The real-world relevance is that e-commerce sellers need fast, data-driven product discovery. The project converts raw trend signals into product leads with prices, sources, links and structured storage.
+
+Background Information: (literature review)
+
+Dropshipping and social-commerce businesses depend on quick identification of products that match public attention. Current approaches often use manual browsing of social media, Google Trends, supplier websites and competitor marketplaces. These approaches are time-consuming and do not provide reliable daily records.
+
+Automation platforms such as n8n make it possible to connect APIs, databases and messaging tools without building a full backend from scratch. AI models such as Gemini can help classify trends, explain opportunities and generate product search queries. Search APIs such as Tavily and supplier APIs such as CJ Dropshipping can then be used to connect demand signals with actual products.
+
+Our workflow combines these ideas into one repeatable pipeline: trend aggregation, scoring, AI curation, supplier scraping, storage and monitoring.
+
+Objectives
+
+Primary Objectives:
+
+- Build an automated EL workflow on n8n Cloud for Indian dropshipping product intelligence.
+
+- Collect trending topics from YouTube Trending India, Google Trends RSS and Google News RSS.
+
+- Score, deduplicate and rank topics using product-intent logic.
+
+- Use Gemini 2.5 Flash with Tavily search and Postgres memory to select the top dropshipping opportunities.
+
+- Scrape supplier/product data from CJ Dropshipping and Indian marketplace search sources.
+
+- Store outputs in Google Sheets, Google Drive JSON archives and Supabase/Postgres.
+
+- Build an EL Error Handler workflow that sends Telegram alerts when workflow failures occur.
+
+Secondary Objectives:
+
+- Keep the workflow modular so each phase can be tested and improved separately.
+
+- Maintain local JSON exports of the n8n workflows for backup and restoration.
+
+- Add clear sticky-note documentation inside the n8n canvas for demonstration.
+
+- Create structured daily outputs that can later support Shopify listing, advertising automation or dashboard development.
+
+- Reduce manual monitoring by using per-node error handling and a workflow-level error handler.
+
+Methodology
+
+4.1 Approach:
+
+The project uses an automated ETL plus AI-curation approach.
+
+Flow chart explanation:
+
+Schedule Trigger -> YouTube/Trends/News collection -> Score, dedupe and rank topics -> Save ranked trends -> Filter Top 30 -> Gemini AI curator -> Parse Top 10 picks -> Search supplier/marketplace products -> Normalize product data -> Store in Sheets, Drive and Supabase -> Telegram alert on error.
+
+The EL workflow is divided into phases. Phase 1 gathers and ranks demand signals. Phase 2 uses an AI agent to convert those signals into dropshipping opportunities. Phase 3 searches product sources and stores usable product records. The EL Error Handler workflow provides monitoring for crashes and critical failures.
+
+4.2 Procedures:
+
+1. Designed the pipeline architecture and selected n8n Cloud as the orchestration platform.
+
+2. Created the main EL workflow with a 24-hour schedule trigger.
+
+3. Connected YouTube Data API, Google Trends RSS and Google News RSS as input sources.
+
+4. Wrote Code nodes to parse, score, deduplicate, categorize and rank trends.
+
+5. Added Google Sheets and Google Drive storage for daily trend data and JSON archives.
+
+6. Added the AI curation phase using Gemini 2.5 Flash, Tavily search and Postgres memory.
+
+7. Added parsing logic so the agent output becomes structured rows.
+
+8. Added CJ Dropshipping product search, token generation, keyword cleanup and top-product selection.
+
+9. Added an expanded Indian-market branch using Tavily marketplace search, Browserbase fallback, Gemini product extraction and normalized product rows.
+
+10. Added final storage fan-out to Google Sheets, Google Drive and Supabase.
+
+11. Added inline error formatting and Telegram alerts, then linked the external EL Error Handler workflow.
+
+12. Tested outputs using saved JSON samples and Supabase inserted records.
+
+5. Project Execution
+
+5.1 Planning and Design:
+
+During planning, we identified that the workflow needed four main capabilities: data collection, product-opportunity analysis, product sourcing and error monitoring. The workflow canvas was organized using sticky notes for Phase 1, Phase 2, Phase 3 supplier scraping, Phase 3 Indian-market scraping, storage fan-out and error handling.
+
+The design decision was to keep trend collection separate from AI curation and product scraping. This makes debugging easier because each phase produces a clear output: ranked trends, curated picks and scraped product records.
+
+5.2 Implementation:
+
+Main EL workflow implemented so far:
+
+- Every 24 Hours schedule trigger starts the automation.
+
+- YouTube Trending IN fetches popular Indian videos.
+
+- Fetch . Score . Dedupe . Rank also reads Google Trends RSS and Google News RSS, calculates product intent, removes near-duplicates and ranks topics.
+
+- Create Day Tab, Prepare Sheet Rows and Write Rows to Sheet store daily ranked trends.
+
+- Prepare JSON File and Drive Upload archive the raw trend payload.
+
+- Filter Top 30 prepares the best topics for the AI agent.
+
+- Dropship AI Agent uses Gemini Flash, Tavily web search and Postgres memory to select high-potential dropshipping opportunities.
+
+- Parse Agent Output converts the AI response into structured JSON rows.
+
+- Write Curated Picks stores the AI-selected opportunities in Google Sheets.
+
+- CJ Get Token, Build Search Query, CJ Product List and Pick Top 3 search CJ Dropshipping and select product matches.
+
+- The newer Indian-market branch builds Tavily queries, searches Indian marketplaces, uses Browserbase when content is thin, extracts product details with Gemini, and normalizes rows.
+
+- Merge Sources combines CJ and Indian-market product data.
+
+- Storage nodes write scraped product results to Sheets, Drive and Supabase.
+
+- Error Formatter and Telegram Alert handle inline node failures.
+
+EL Error Handler implemented so far:
+
+- EL Workflow Error trigger receives workflow-level errors.
+
+- Format Error Message prepares node name, error message, IST timestamp and execution link.
+
+- Alert Developer sends the formatted alert to Telegram.
+
+6. Tools and Techniques Used
+
+6.1 Tools:
+
+- n8n Cloud: Main workflow automation and orchestration platform.
+
+- YouTube Data API v3: Fetches trending videos for India.
+
+- Google Trends RSS: Provides daily trending searches for India.
+
+- Google News RSS: Provides current Indian news topics.
+
+- Gemini 2.5 Flash: AI model used for dropshipping opportunity curation and product extraction.
+
+- Tavily API: Web search tool for demand verification and Indian marketplace discovery.
+
+- Browserbase: Fallback fetch tool when marketplace content from search is too thin.
+
+- CJ Dropshipping API: Supplier catalogue source for product matches.
+
+- Google Sheets: Stores ranked trends, curated picks and scraped product rows.
+
+- Google Drive: Stores JSON archives for trends and scraped products.
+
+- Supabase/Postgres: Stores scraped product records and AI memory.
+
+- Telegram Bot: Sends developer alerts for workflow errors.
+
+- Git and local JSON exports: Used for workflow backup, versioning and restoration.
+
+6.2 Techniques:
+
+- API integration: Multiple APIs are connected through n8n HTTP Request, Google and database nodes.
+
+- Heuristic scoring: Topics are scored using purchase-intent keywords, product categories and negative filters.
+
+- Deduplication: Similar topics are removed using word-overlap logic.
+
+- Prompt engineering: The AI agent is instructed to return only valid JSON so it can be parsed downstream.
+
+- Memory-based curation: Postgres memory helps the AI keep useful context across runs.
+
+- Query normalization: Product search queries are cleaned so supplier search receives short product-focused keywords.
+
+- Batching and retry logic: Marketplace and supplier calls are paced to reduce rate-limit and reliability problems.
+
+- Fallback scraping: Browserbase is used when Tavily raw content is insufficient.
+
+- Data normalization: Product fields are reshaped into a common schema for Sheets, Drive and Supabase.
+
+- Error routing: Critical nodes use error outputs and the separate error workflow catches full execution crashes.
+
+7. Partial Results
+
+7.1 Initial Findings:
+
+The EL pipeline has reached a working prototype stage. It can collect trend signals, rank them, generate AI-curated product opportunities, search supplier products and store product rows.
+
+A saved Supabase output sample contains 30 scraped product rows for the run date 26 April 2026. Each row includes fields such as source topic, source pick rank, opportunity score, provider, product name, product URL, SKU, price, currency, image URLs, offers and scrape time. This shows that the CJ Dropshipping branch has successfully produced structured product records.
+
+The error workflow is also implemented and active in n8n. It formats execution failures and sends a Telegram alert with the failed node, error details, IST time and execution link.
+
+7.2 Iterative Improvements:
+
+- Added a stronger AI curation phase so the workflow does not only collect trends, but also evaluates them as dropshipping opportunities.
+
+- Added Postgres memory to improve continuity across daily runs.
+
+- Improved search-query generation so product searches are based on concrete product nouns instead of vague trend titles.
+
+- Added a second product discovery route for Indian marketplaces using Tavily, Browserbase and Gemini extraction.
+
+- Added Supabase upsert logic using product URL and source topic to avoid duplicate product records.
+
+- Added two-layer error handling: per-node Telegram alerts and a separate EL Error Handler workflow.
+
+- Added n8n sticky notes to document the workflow visually for presentation.
+
+One remaining issue found during testing is that the Gemini Extract Product test output currently shows a code/configuration error. That branch needs final correction and re-testing before it is treated as fully stable.
+
+8. Results and Discussion
+
+8.1 Final Results:
+
+For this phase of the project, the main result is a software prototype of an automated dropshipping intelligence pipeline. The EL workflow now covers trend aggregation, scoring, AI curation, product searching, storage and alerting.
+
+Completed outputs include:
+
+- Daily ranked trends prepared for Google Sheets and JSON archive storage.
+
+- AI-curated dropshipping opportunity rows prepared for the Curated Picks sheet.
+
+- CJ Dropshipping product rows saved in a structured format.
+
+- Supabase product records generated from scraped product data.
+
+- Google Drive JSON archive logic for both trend and product datasets.
+
+- Telegram alerting for both inline node errors and full workflow-level errors.
+
+At the time of checking, the live EL Error Handler workflow is active. The main EL workflow is implemented and linked to the error workflow; it should be activated after final validation of the expanded Indian-market extraction branch.
+
+8.2 Discussion:
+
+The project objectives have been largely achieved for the current phase. The workflow demonstrates that public trend data can be transformed into structured e-commerce product leads with minimal manual work.
+
+The most important achievement is that the system is not only collecting data. It is also analyzing product intent, using AI to select opportunities, connecting those opportunities to supplier products and saving the results in multiple destinations.
+
+The main limitation is reliability of external services and generated extraction code. APIs may fail, return thin content or change response formats. This is why the project includes retry logic, fallback fetching, Supabase upsert and Telegram alerts. The remaining development work should focus on validating the Gemini extraction branch, running the workflow across multiple days and improving the quality of product matching.
+
+9. Prototype (Hardware/Software)
+
+9.1 Prototype Description:
+
+The prototype is a software-only automation system built in n8n Cloud. It does not require hardware. The prototype contains two workflows:
+
+1. EL workflow: The main automation pipeline for trend collection, AI curation, supplier/marketplace product scraping and storage.
+
+2. EL Error Handler workflow: The monitoring workflow that catches workflow-level errors and alerts the developer.
+
+Main features include scheduled execution, multi-source trend collection, AI curation, product scraping, structured storage, database persistence, JSON archiving and Telegram alerting.
+
+9.2 Development Process:
+
+The prototype was developed incrementally. First, the trend collection and ranking logic was built. Next, storage was added so daily outputs could be reviewed. After that, the AI curation phase was added to select the best dropshipping ideas from the ranked topics. Then supplier search through CJ Dropshipping was implemented. Finally, the Indian-market branch, Supabase storage and error handling were added.
+
+Challenges included handling different API response formats, keeping AI output valid JSON, creating useful product search queries and preventing one failed node from hiding the rest of the workflow status. These were handled using parsing code, strict prompts, query cleanup, continue-on-fail storage nodes and Telegram error alerts.
+
+9.3 Testing and Validation:
+
+Testing completed so far:
+
+- Verified local workflow exports for EL and EL Error Handler.
+
+- Verified live n8n workflow details and the link from EL to the EL Error Handler workflow.
+
+- Checked saved Supabase output containing 30 product records from a run on 26 April 2026.
+
+- Checked that product rows include source topic, rank, opportunity score, provider, product URL, price and metadata.
+
+- Confirmed that the error workflow formats failures and sends Telegram alerts.
+
+Testing still required:
+
+- Re-test the Gemini Extract Product branch after correcting the current code/configuration error.
+
+- Run the full EL workflow for multiple days to compare consistency of trend ranking and product results.
+
+- Validate the final Google Sheets and Google Drive outputs during a live demonstration run.
+
+10. Conclusion
+
+10.1 Summary:
+
+The project has successfully built the core automation layer for the EL dropshipping intelligence system. The workflow can collect Indian trend data, score and rank it, use AI to identify product opportunities, search supplier and marketplace sources, store results and alert the developer when failures occur.
+
+The work completed so far is sufficient to demonstrate the main concept: automated conversion of current market trends into structured product intelligence. The next step is hardening and final validation, especially for the expanded Indian-market extraction branch.
+
+10.2 Personal Reflection:
+
+Through this project, we learned how real automation systems are built by connecting APIs, AI models, databases and alerting tools. We also learned that a workflow is not complete only when the happy path works; it also needs error handling, data validation and clear storage outputs.
+
+The project improved our understanding of n8n, API-based automation, AI prompt design, JSON parsing, database insertion and practical debugging. It also showed how an academic project can be developed into a useful software prototype with real business applications.
+
+11. Visuals:
+
+Visual material available for the project includes:
+
+- Saas-PNG.png: Overall SaaS pipeline architecture diagram.
+
+- Saas.pdf: PDF version of the full SaaS architecture.
+
+- n8n workflow canvas: Sticky-note sections showing Phase 1 trend fetch, Phase 2 AI curator, Phase 3 supplier scraping, Phase 3 Indian-market scraping, storage fan-out and error handling.
+
+- Google Sheets outputs: Daily trend tabs, Curated Picks tab and scraped product rows.
+
+- Supabase output sample: Saved scraped_products records from the 26 April 2026 run.
+
+12. Outcome of the work:
+
+The outcome of the current phase is a working software prototype for automated dropshipping product intelligence. The project has not yet reached publication or patenting stage. Its current outcome is product-development oriented: a functional n8n-based automation pipeline with workflow exports, structured storage, database output and Telegram error alerts.
+
+Future outcomes can include a dashboard, Shopify auto-listing integration, advertising automation and a complete SaaS product workflow.
+
