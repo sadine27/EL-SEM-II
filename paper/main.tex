@@ -1,3 +1,4 @@
+\pdfminorversion=7
 \documentclass[conference,a4paper,10pt]{IEEEtran}
 \IEEEoverridecommandlockouts
 
@@ -20,10 +21,12 @@
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usepackage{url}
+\usepackage{seqsplit}
 \usepackage{csquotes}
 \usepackage[hidelinks,breaklinks=true]{hyperref}
 \usepackage[capitalise,noabbrev]{cleveref}
 \usepackage[section]{placeins}
+\raggedbottom
 
 % Relax line breaking to reduce overfull hboxes from long URLs/identifiers
 \emergencystretch=3em
@@ -565,7 +568,7 @@ Operator interactions with the inline keyboard are received by an independent su
 
 \begin{description}
 \item[Parse HIL Callback] Extracts the callback payload, including the operator's choice (\texttt{approve}, \texttt{reject}, \texttt{skip}) and the Supabase row identifier embedded in the callback data.
-\item[Apply HIL Callback] Performs an UPDATE on the \texttt{hil\_reviews} row, setting \texttt{approval\_status}, \texttt{approval\_decided\_at}, and \texttt{approval\_actor} (the Telegram user). The update is idempotent: a second tap has no further effect.
+\item[Apply HIL Callback] Performs an UPDATE on the \texttt{hil\_reviews} row, setting \texttt{approval\_status}, \texttt{\seqsplit{approval\_decided\_at}}, and \texttt{approval\_actor} (the Telegram user). The update is idempotent: a second tap has no further effect.
 \item[Answer HIL Callback] Calls Telegram's \texttt{answerCallbackQuery} method to dismiss the loading spinner on the operator's tap.
 \item[If Callback Finalized Review] Branches on whether the final state is non-pending. If so:
   \begin{description}
@@ -916,7 +919,9 @@ For each of $N = 1000$ trials, the 30 records are shuffled and split into a trai
 \centering
 \caption{BCC-HIL evaluation over 1000 bootstrap train/test splits with synthetic feedback that includes a per-category latent bias unobserved by the agent. The 95\% confidence interval for the calibrated arm is reported.}
 \label{tab:bcc-results}
-\begin{tabular}{lrrr}
+\begingroup
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrr@{}}
 \toprule
 Metric & Raw $s/10$ & BCC-HIL & 95\% CI (BCC) \\
 \midrule
@@ -924,6 +929,7 @@ Spearman rank corr. & $0.45$ & $0.85$ & $[0.25,\, 1.00]$ \\
 Brier score (lower is better) & $0.335$ & $0.243$ & $[0.17,\, 0.33]$ \\
 \bottomrule
 \end{tabular}
+\endgroup
 \end{table}
 
 \Cref{tab:bcc-posteriors} shows the per-category posterior after one representative training fold (the first trial), illustrating that BCC has begun to differentiate categories within fifteen observations.
@@ -1190,7 +1196,7 @@ developer.
 \label{app:glossary}
 For readers unfamiliar with n8n, \cref{tab:nodeglossary} summarizes the node types referenced throughout the paper, their primary role in the EL workflow, and (where relevant) the configuration property that distinguishes them.
 
-\begin{table}[h]
+\begin{table}[!ht]
   \centering
   \caption{n8n node types referenced in this paper.}
   \label{tab:nodeglossary}
