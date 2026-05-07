@@ -7,6 +7,64 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 — Iter 4 — `Filter Top 30` + Curator (single-shot Gemini)
+
+The first LLM iteration. Ports the front of the Phase 2 AI curator chain. **Scope was narrowed deliberately** — the n8n original is a LangChain agent loop with a Tavily web-search tool node and Postgres chat memory, none of which can be ported as one iter without doing a half-decent job on three things at once. So iter 4 gets the prompt, the model call, and the parser; iter 5+ will reintroduce tool-use and memory.
+
+**Scope correction from iter-3 preview:** I had said "LLM-driven product-idea expansion" was directly downstream of `Fetch . Score . Dedupe . Rank`. Reading the actual graph, it isn't — `Filter Top 30` sits in between as a Code node that slices to 30 and formats topics for the curator prompt. So iter 4 pairs the two.
+
+**Mapping:**
+
+| n8n node                             | Python                                      |
+| ------------------------------------ | ------------------------------------------- |
+| `Filter Top 30` (Code)               | `el/nodes/filter_top_30.py :: run(ctx)`     |
+| `Dropship AI Agent` (LangChain agent) | `el/nodes/curate_picks.py :: run(ctx)`     |
+| `Parse Agent Output` (Code)          | `el/nodes/curate_picks.py :: parse_agent_output` |
+| (new — provider abstraction)         | `el/llm.py` (`LLMProvider`, `GeminiProvider`) |
+
+**What it does:**
+1. `filter_top_30.run` reads `ctx["ranked_payload"]`, slices the top 30 trends, builds a numbered `topics_text` block in the exact format the n8n original used, derives `run_date` from `metadata.scraped_at` (or today's date as fallback), and stores `ctx["filtered"] = {topics_text, run_date, total}`.
+2. `curate_picks.run` formats the n8n system prompt verbatim (with today's date interpolated), calls Gemini once via `GeminiProvider.generate(system, user)`, and runs `parse_agent_output` on the raw text.
+3. `parse_agent_output` is a faithful port of the n8n `Parse Agent Output` node: regex-finds the first `[...]` block, `json.loads` it, attaches `run_date` to each pick. On parse failure (or empty array) returns a single-element list with `error="No picks parsed"` and the first 500 chars of `raw` — same shape the n8n node emitted on failure.
+
+**Decisions:**
+- **Provider abstraction at `el/llm.py`.** `LLMProvider` is a `typing.Protocol` (duck-typed), `GeminiProvider` is the concrete impl, `default_provider()` returns Gemini today. Adding OpenAI/Mistral later means dropping in another class implementing `generate(system, user) -> str`. No LangChain dep — direct REST call to `generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`.
+- **`generate` is single-shot only.** No streaming, no tool/function calling, no chat history. Curator nodes that need those will compose around the protocol or get their own provider impl. Keeping the surface narrow makes mocking trivial.
+- **System prompt is the n8n original verbatim.** Including the line that tells the model to "use web_search to verify..." even though there's no Tavily tool wired up. Faithful port wins over editorial cleanup; the model will simply skip that step. Iter 5 will add the tool back.
+- **`.format()` curly-brace gotcha.** The system prompt embeds a JSON example like `{"rank":1,...}`. `str.format()` reads `{"rank"` as a placeholder and raises `KeyError: '"rank"'`. Fixed by escaping the JSON example's outer braces (`{{...}}`) — the only template variable that actually gets substituted is `{today}`. Caught by `test_run_calls_provider_with_system_and_topics`.
+- **Pipeline gating on `GEMINI_API_KEY`** matches the YouTube pattern from iter 2: skip with a warning if unset, so dev runs without the key still smoke-test cleanly through `filter_top_30`.
+- **Provider injection for tests.** `curate_picks.run(ctx, provider=...)` accepts an optional provider so tests don't need to mock `requests`. Production callers pass nothing and get `default_provider()`.
+
+**Tests added (24 cases across three files):**
+- `test_llm.py` (7): URL/params/body shape, multi-part text concat, empty-candidates fallback, HTTP error propagation, missing-key raises, explicit-key override, `default_provider()` returns Gemini.
+- `test_filter_top_30.py` (6): slicing to 30, run_date extraction, today fallback, empty-payload, exact `topics_text` format, missing-categories tolerance.
+- `test_curate_picks.py` (11): JSON-array extraction (with prose around it, pure array), no-array fallback, malformed-JSON fallback, empty-array fallback, raw truncation to 500 chars, `run` calls provider with right args, `run` attaches `run_date` to every pick, `run` skips on empty/missing `filtered`, `run` falls back gracefully on bad model output.
+
+**Verification:**
+- `pytest tests/ -v` → **56/56 passing** (was 32, added 24).
+- `python run.py` against live YouTube + News RSS → 50 YT + 38 News → 30 filtered → curator skipped (no `GEMINI_API_KEY` in this env). Log line: `Filter Top 30: 30 topics for run_date=2026-05-07`.
+- End-to-end with a stubbed `FakeGemini` provider → 50 YT → 86 ranked → 30 filtered → 1 pick parsed with `run_date` attached. Confirms the full chain wires correctly.
+
+**Known divergences from the n8n original (deliberate, scoped to later iters):**
+
+| Feature                  | n8n EL.json                       | Python today          | Iter to restore |
+| ------------------------ | --------------------------------- | --------------------- | --------------- |
+| Tavily web search        | LangChain tool node, agent loop   | None — single call    | iter 5          |
+| Postgres chat memory     | `memoryPostgresChat` node          | None — stateless      | iter 6+         |
+| Multi-turn agent loop    | LangChain agent decides when done | Single round-trip     | iter 5 (with tools) |
+
+The model output quality will be lower without Tavily — it can't fact-check current Indian market demand. But the data-flow shape is identical, so downstream consumers (`Write Curated Picks`, `Build Search Query`, etc.) won't notice the difference when they get ported.
+
+**What's next (iter 5):**
+
+Two reasonable forks:
+1. **Keep going down the LLM chain:** add the Tavily tool integration so the curator picks get web-verified. Means building a tiny tool-use loop around `GeminiProvider` (or splitting it into a `GeminiAgentProvider`) — Gemini's native function-calling API is JSON-schema-based and not too painful.
+2. **Pivot to Phase 1 storage:** port `Create Day Tab` + `Prepare Sheet Rows` + `Write Rows to Sheet` (Google Sheets) and `Prepare JSON File` + `Drive Upload` (Google Drive). Gives us persistence for the curator output and lets the daily run leave artifacts.
+
+I'd lean (2) — storage gives the pipeline a "done" output to compare across days, which makes iter 5's tool-use additions visible. But (1) is the natural continuation of the LLM thread.
+
+---
+
 ## 2026-05-07 — Iter 3 — `Fetch . Score . Dedupe . Rank`
 
 The big intent-scoring Code node from `EL.json`. This is where the business logic of EL lives — every downstream Phase 2 node consumes its output.
