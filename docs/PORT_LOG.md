@@ -7,6 +7,237 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 - Iter 6d - Callback apply/answer gate
+
+Continues Phase 6 callback handling after `Parse HIL Callback`.
+
+**Mapping:**
+
+| n8n node | Python |
+| --- | --- |
+| `Apply HIL Callback` (Postgres SQL) | `el/nodes/apply_hil_callback.py :: run(ctx, store=None)` |
+| `Answer HIL Callback` (Telegram callback answer) | `el/nodes/answer_hil_callback.py :: run(ctx, provider=None)` |
+| `If Callback Finalized Review` (IF) | `el/nodes/if_callback_finalized_review.py :: run(ctx)` |
+| (extended - Supabase REST helper) | `el/supabase.py :: select_rows(...) / insert_rows(...) / update_rows(...)` |
+| (extended - Telegram helper) | `el/telegram.py :: answer_callback(...)` |
+
+**What it does:**
+- Applies `a/r/s` callback payloads to matching `private.hil_reviews` rows, updating only pending reviews.
+- Inserts `callback_received` and approval/rejection/skip events into `private.hil_review_events`.
+- Preserves n8n response fields for downstream nodes:
+  `callback_answer_text`, `telegram_edit_text`, and `message_should_finalize`.
+- Answers Telegram callback queries with `cache_time = 0` and `show_alert = false`.
+- Splits finalized callbacks into `ctx["hil_finalized_callbacks"]` for the edit-message branch.
+
+**Divergences vs original:**
+- The n8n node used one CTE-heavy Postgres query. Python implements the same behavior through Supabase REST operations with the service key.
+- Python writes UTC timestamps itself for `reviewed_at` / `updated_at`; n8n SQL used `now()`.
+
+**Verification after each port:**
+- After `Apply HIL Callback`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **194/194 passing**.
+- After `Answer HIL Callback`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **200/200 passing**.
+- After `If Callback Finalized Review`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **202/202 passing**.
+
+**Port status:**
+- Functional nodes ported: **38/63** across `EL` + `EL Error Handler`.
+- Overall workflow port: **~60.3%**.
+
+**Next iter preview:**
+- Continue Phase 6: `Edit HIL Review Message`, `Log HIL Message Edited`, `Delete HIL Review Message After Edit Failure`, and `Log HIL Message Deleted`.
+- Continue remaining discovery branch: Tavily/Browserbase path from `Build Tavily Query` through `Normalize Browserbase Review`.
+
+---
+
+## 2026-05-07 - Iter 6c - Telegram delivery + callback parse
+
+Continues from `Prepare Telegram Card` through the Telegram delivery branch, then starts the Phase 6 callback branch.
+
+**Mapping:**
+
+| n8n node | Python |
+| --- | --- |
+| `Download Product Image` (HTTP Request) | `el/nodes/download_product_image.py :: run(ctx, provider=None)` |
+| `Send HIL Telegram Photo` (Telegram sendPhoto) | `el/nodes/send_hil_telegram_photo.py :: run(ctx, provider=None)` |
+| `Mark Telegram Photo Sent` (Postgres update) | `el/nodes/mark_telegram_photo_sent.py :: run(ctx, provider=None)` |
+| `Send HIL Telegram Text Fallback` (Telegram sendMessage) | `el/nodes/send_hil_telegram_text_fallback.py :: run(ctx, provider=None)` |
+| `Mark Telegram Text Fallback` (Postgres update) | `el/nodes/mark_telegram_text_fallback.py :: run(ctx, provider=None)` |
+| `Parse HIL Callback` (Code) | `el/nodes/parse_hil_callback.py :: run(ctx)` |
+| (new - Telegram Bot API helper) | `el/telegram.py` |
+| (extended - Supabase REST helper) | `el/supabase.py :: update_row_by_id(...)` |
+
+**What it does:**
+- Downloads product images with the n8n headers, 15s timeout, and 5 redirect limit, storing successful binary payloads at `ctx["telegram_photo_cards"]`.
+- Routes image-download failures to `ctx["telegram_text_fallback_cards"]`, matching n8n's error output into text fallback.
+- Sends HIL review photo cards through Telegram `sendPhoto` with the same inline buttons: Approve, Reject, Skip, and Open Product.
+- Records successful photo delivery back to `private.hil_reviews` with `telegram_media_status = 'sent'`.
+- Sends text-only fallback cards through Telegram `sendMessage` for download/photo failures.
+- Records fallback delivery back to `private.hil_reviews` with `telegram_media_status = 'text_only'`.
+- Parses Telegram callback payloads of the form `a:<review_id>:<callback_token>`, `r:<review_id>:<callback_token>`, and `s:<review_id>:<callback_token>` into `ctx["hil_callbacks"]`.
+
+**Divergences vs original:**
+- Telegram credentials are read from `TELEGRAM_HIL_BOT_TOKEN`; the n8n workflow uses the `EL-HIL-BOT` credential.
+- Supabase delivery updates use REST `PATCH` and Python UTC timestamps for `telegram_sent_at` / `updated_at`; n8n SQL used `now()`.
+- `Telegram Trigger` itself is not a long-running listener yet. The callback parser expects callback updates in `ctx["telegram_updates"]` or `ctx["telegram_trigger_updates"]`.
+
+**Verification after each port:**
+- After `Download Product Image`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **154/154 passing**.
+- After `Send HIL Telegram Photo`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **162/162 passing**.
+- After `Mark Telegram Photo Sent`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **168/168 passing**.
+- After `Send HIL Telegram Text Fallback`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **174/174 passing**.
+- After `Mark Telegram Text Fallback`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **179/179 passing**.
+- After `Parse HIL Callback`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **186/186 passing**.
+
+**Next iter preview:**
+- Continue the callback branch: `Apply HIL Callback`, `Answer HIL Callback`, `If Callback Finalized Review`, `Edit HIL Review Message`, delete-after-edit-failure, and callback event logs.
+- Continue the remaining source branch: Tavily/Browserbase path from `Build Tavily Query` through `Normalize Browserbase Review`.
+
+---
+
+## 2026-05-07 - Iter 6b - CJ review/HIL handoff path
+
+Continues downstream from `Pick Top 3` through the first Telegram-card preparation step.
+
+**Mapping:**
+
+| n8n node | Python |
+| --- | --- |
+| `Normalize CJ Review` (Code) | `el/nodes/normalize_cj_review.py :: run(ctx, ...)` |
+| `Merge Review Sources` (Merge) | `el/nodes/merge_review_sources.py :: run(ctx)` |
+| `Phase 4 Candidate Selection` (Code) | `el/nodes/phase4_candidate_selection.py :: run(ctx, ...)` |
+| `Supabase Insert (HIL Reviews)` (Postgres upsert) | `el/nodes/supabase_insert_hil_reviews.py :: run(ctx, provider=None)` |
+| `Prepare Telegram Card` (Code) | `el/nodes/prepare_telegram_card.py :: run(ctx, ...)` |
+| (new - Supabase REST helper) | `el/supabase.py` |
+
+**What it does:**
+- Converts CJ product rows into the `hil_v1` review contract at `ctx["cj_review_items"]`.
+- Merges normalized review candidates into `ctx["review_candidates"]`, ready for the future Browserbase branch.
+- Ports Phase 4 scoring, mismatch blocking, dedupe, per-topic/provider caps, fallback selection, and diagnostic payload attachment.
+- Upserts selected HIL review rows to `private.hil_reviews` using the n8n conflict columns:
+  `workflow_run_id`, `source_provider`, `source_topic`, `product_url`.
+- Formats Supabase-returned review rows into Telegram card fields/callback payloads at `ctx["telegram_cards"]`.
+
+**Divergences vs original:**
+- Supabase upsert uses direct REST/PostgREST with env vars instead of n8n Postgres credentials:
+  `SUPABASE_URL` plus `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_SECRET_KEY`, or `SUPABASE_KEY`.
+- `Prepare Telegram Card` preserves the n8n default chat id but allows `TELEGRAM_HIL_CHAT_ID` to override it.
+- The Python Phase 4 diagnostics use ASCII `...` for truncation instead of the n8n Unicode ellipsis.
+
+**Verification after each port:**
+- After `Normalize CJ Review`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **122/122 passing**.
+- After `Merge Review Sources`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **125/125 passing**.
+- After `Phase 4 Candidate Selection`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **133/133 passing**.
+- After `Supabase Insert (HIL Reviews)`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **141/141 passing**.
+- After `Prepare Telegram Card`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **147/147 passing**.
+
+**Next iter preview:**
+- Continue Telegram delivery: `Download Product Image`, `Send HIL Telegram Photo`, `Send HIL Telegram Text Fallback`, and Telegram delivery-status update nodes.
+- Parallel remaining source path: Tavily/Browserbase branch from `Build Tavily Query` through `Normalize Browserbase Review`.
+
+---
+
+## 2026-05-07 - Iter 5d/6a - Curated-picks persistence + CJ front door
+
+Continues downstream from `Parse Agent Output`, then starts the CJ product-discovery branch.
+
+**Mapping:**
+
+| n8n node | Python |
+| --- | --- |
+| `Create Curated Picks Tab` (Google Sheets create sheet) | `el/nodes/create_curated_picks_tab.py :: run(ctx, provider=None)` |
+| `Write Curated Picks` (Google Sheets append) | `el/nodes/write_curated_picks.py :: run(ctx, provider=None)` |
+| `Build Search Query` (Code) | `el/nodes/build_search_query.py :: run(ctx)` |
+| `CJ Get Token` (HTTP Request) | `el/nodes/cj_get_token.py :: run(ctx, provider=None)` |
+| `CJ Product List` (HTTP Request) | `el/nodes/cj_product_list.py :: run(ctx, provider=None, ...)` |
+| `Pick Top 3` (Code) | `el/nodes/pick_top_3.py :: run(ctx)` |
+| (new - CJ API helper) | `el/cj.py` |
+
+**What it does:**
+- Creates the fixed `Curated Picks` sheet tab and appends parsed curator picks using the n8n schema order:
+  `run_date`, `rank`, `topic`, `opportunity_score`, `reason`, `suggested_product_type`, `target_audience`, `search_query_in`.
+- Converts each successful curated pick into a CJ keyword query, preferring `search_query_in`, then falling back to the n8n product-type/topic heuristic.
+- Authenticates to CJ using env vars `CJ_EMAIL` and `CJ_API_KEY`; no legacy secret is embedded in code.
+- Fetches CJ product-list results per keyword with the n8n defaults: page 1, page size 20, max 3 tries, 2s retry wait, 1.5s inter-keyword batch interval.
+- Filters each CJ list for keyword-name overlap, sorts by `listedNum`, tops up to 3 products, and emits normalized CJ product rows at `ctx["cj_top_products"]`.
+
+**Divergences vs original:**
+- n8n hardcoded the CJ email/API key in the HTTP node body. Python requires `CJ_EMAIL` and `CJ_API_KEY`.
+- `CJ Product List` stores each keyword response with its query metadata in `ctx["cj_product_list_responses"]`; n8n relied on positional references to `$('Build Search Query').all()[i]`.
+- Failed CJ product-list calls are represented as `{ok: false, error: ...}` entries and skipped by `Pick Top 3`, matching the practical effect of `continueOnFail`.
+
+**Verification after each port:**
+- After `Create Curated Picks Tab`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **90/90 passing**.
+- After `Write Curated Picks`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **95/95 passing**.
+- After `Build Search Query`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **102/102 passing**.
+- After `CJ Get Token`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **107/107 passing**.
+- After `CJ Product List`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **113/113 passing**.
+- After `Pick Top 3`: `.venv\Scripts\python.exe -m pytest tests/ -v` - **117/117 passing**.
+
+**Next iter preview:**
+- Continue either the CJ review branch (`Normalize CJ Review` / `Merge Review Sources`) or the parallel Tavily branch (`Build Tavily Query` / `Tavily Search (IN Market)`).
+
+---
+
+## 2026-05-07 - Iter 5c - Phase 1 Drive JSON archive upload
+
+Ports the Google Drive upload node downstream of `Prepare JSON File`.
+
+**Mapping:**
+
+| n8n node | Python |
+| --- | --- |
+| `Drive Upload` (Google Drive upload) | `el/nodes/drive_upload.py :: run(ctx, provider=None)` |
+| (new - Drive API helper) | `el/google_drive.py` |
+
+**What it does:**
+- Reads the n8n-like `ctx["json_file"]` item emitted by `Prepare JSON File`.
+- Decodes `binary.data.data` from base64.
+- Uploads the JSON archive to Drive folder `1M0FRJeZ6uguJSfmheWwU8hwiZe_tjVja`, preserving the n8n filename pattern from `json.filename`.
+- Stores the upload result at `ctx["drive_upload_result"]`.
+
+**Divergences vs original:**
+- n8n used Google Drive OAuth credentials. Python uses the same service-account env var as the Sheets port: `GOOGLE_SERVICE_ACCOUNT_JSON`.
+- n8n `continueOnFail` is modeled by catching upload/provider errors, storing `{ok: false, uploaded: false, error: ...}`, and continuing.
+- The Drive client uses the raw Drive v3 multipart upload endpoint via `requests`, keeping dependencies aligned with the existing Sheets helper.
+
+**Verification:**
+- Added `tests/test_google_drive.py` and `tests/test_drive_upload.py`.
+- Pipeline smoke coverage now asserts Drive upload is skipped without credentials and invoked through the credential gate when present.
+- `.venv\Scripts\python.exe -m pytest tests/ -v` - **88/88 passing**.
+
+**Next iter preview:**
+- Port `Create Curated Picks Tab` / `Write Curated Picks` so the curator branch persists its top 10 product opportunities.
+
+---
+
+## 2026-05-07 - Iter 5b - Phase 1 JSON archive preparation
+
+Ports the next credential-free storage node downstream of `Fetch . Score . Dedupe . Rank`.
+
+**Mapping:**
+
+| n8n node | Python |
+| --- | --- |
+| `Prepare JSON File` (Code) | `el/nodes/prepare_json_file.py :: run(ctx)` |
+
+**What it does:**
+- Reads `ctx["ranked_payload"]`.
+- Serializes it as pretty UTF-8 JSON with two-space indentation.
+- Builds the original filename pattern: `trending_india_YYYY-MM-DD.json`.
+- Base64-encodes the JSON and stores an n8n-like item at `ctx["json_file"]` with `json.filename` plus `binary.data`.
+
+**Divergences vs original:**
+- n8n placed this item directly on the node output. Python stores it in `ctx["json_file"]` for the future `Drive Upload` node.
+- Missing `ranked_payload` becomes `{}` so smoke tests and local partial runs remain deterministic.
+
+**Verification:**
+- Added `tests/test_prepare_json_file.py`.
+- Pipeline smoke coverage now asserts `json_file` is prepared without Google credentials.
+
+**Next iter preview:**
+- Done in Iter 5c. Next storage gap is curated-picks sheet output.
+
+---
+
 ## 2026-05-07 — Iter 5a — Phase 1 Sheets append
 
 Ports the first storage branch downstream of `Fetch . Score . Dedupe . Rank`: create the day tab, prepare ranked-trend rows, and append those rows to Google Sheets.
