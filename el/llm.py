@@ -58,8 +58,10 @@ class GeminiProvider:
         if not candidates:
             log.warning("Gemini returned no candidates: %s", data)
             return ""
-        parts = (candidates[0].get("content") or {}).get("parts") or []
-        return "".join(p.get("text", "") for p in parts)
+        first = candidates[0] if isinstance(candidates[0], dict) else {}
+        content = first.get("content") if isinstance(first.get("content"), dict) else {}
+        parts = content.get("parts") if isinstance(content.get("parts"), list) else []
+        return "".join(p.get("text", "") for p in parts if isinstance(p, dict))
 
 
 class LLMAgentProvider(Protocol):
@@ -118,22 +120,27 @@ class GeminiAgentProvider:
                 log.warning("Gemini returned no candidates on turn %d", turn)
                 return ""
 
-            content = candidates[0].get("content") or {}
-            parts = content.get("parts") or []
+            first = candidates[0] if isinstance(candidates[0], dict) else {}
+            content = first.get("content") if isinstance(first.get("content"), dict) else {}
+            parts = content.get("parts") if isinstance(content.get("parts"), list) else []
 
             # Check for tool use
-            tool_calls = [p for p in parts if "functionCall" in p]
+            tool_calls = [p for p in parts if isinstance(p, dict) and "functionCall" in p]
             if not tool_calls:
                 # No more tool calls — extract final text response
-                text_parts = [p.get("text", "") for p in parts if "text" in p]
+                text_parts = [p.get("text", "") for p in parts if isinstance(p, dict) and "text" in p]
                 return "".join(text_parts)
 
             # Execute tool calls and append results to conversation
             tool_results = []
             for part in tool_calls:
                 func_call = part.get("functionCall", {})
+                if not isinstance(func_call, dict):
+                    continue
                 func_name = func_call.get("name", "")
                 func_args = func_call.get("args", {})
+                if not isinstance(func_args, dict):
+                    func_args = {}
 
                 if func_name == "web_search":
                     query = func_args.get("query", "")

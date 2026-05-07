@@ -72,7 +72,10 @@ def run(ctx: dict) -> dict:
         entity_tokens = tokenize(meta.get('entity_hint') or '')
         merch_intent = meta.get('intent_mode') == 'merch'
 
-        score = float(result.get('tavily_score') or 0) * 10
+        try:
+            score = float(result.get('tavily_score') or 0) * 10
+        except (TypeError, ValueError):
+            score = 0.0
         if url_looks_product(url):
             score += 4
         if 'rs' in raw.lower() or '₹' in raw:
@@ -111,6 +114,8 @@ def run(ctx: dict) -> dict:
             result = result_item.get('json', result_item)
         else:
             result = getattr(result_item, 'json', result_item)
+        if not isinstance(result, dict):
+            continue
         query_key = (result.get('tavily_query'), result.get('entity_hint'), result.get('product_hint'))
         if query_key not in results_by_query_key:
             results_by_query_key[query_key] = []

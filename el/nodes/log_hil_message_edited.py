@@ -47,6 +47,8 @@ class SupabaseHilMessageEditLogger:
 
 def run(ctx: dict, *, logger: HilMessageEditLogger | None = None) -> dict:
     callback_data = ctx.get("hil_finalized_callbacks") or {}
+    if not isinstance(callback_data, dict):
+        callback_data = {}
     review_id = callback_data.get("review_id")
     edit_result = ctx.get("edit_hil_message_result") or {}
 

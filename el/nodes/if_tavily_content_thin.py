@@ -18,8 +18,13 @@ def run(ctx: dict) -> dict:
             j = item.get('json', item)
         else:
             j = getattr(item, 'json', item)
+        if not isinstance(j, dict):
+            continue
 
-        content_len = j.get('tavily_content_len') or 0
+        try:
+            content_len = int(j.get('tavily_content_len') or 0)
+        except (TypeError, ValueError):
+            content_len = 0
         if content_len < 500:
             thin.append(item)
         else:

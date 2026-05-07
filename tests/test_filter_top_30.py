@@ -69,3 +69,14 @@ def test_filter_handles_missing_categories():
     }}
     ft.run(ctx)
     assert "cats: |" in ctx["filtered"]["topics_text"]
+
+
+def test_filter_handles_malformed_payload_items():
+    """Regression: malformed ranked_payload/trends crashed on dict indexing."""
+    ctx = {"ranked_payload": {
+        "metadata": "bad",
+        "trends": [None, {"topic": "Unicode 🚀", "suggested_categories": "bad"}],
+    }}
+    ft.run(ctx)
+    assert ctx["filtered"]["total"] == 1
+    assert '"Unicode 🚀"' in ctx["filtered"]["topics_text"]

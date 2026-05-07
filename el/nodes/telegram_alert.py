@@ -28,11 +28,9 @@ def run(ctx: dict, *, provider: TelegramProvider | None = None) -> dict:
 
     chat_id = config.get("TELEGRAM_ALERT_CHAT_ID", "8243518279")
 
-    # Use provided provider or create default
-    if provider is None:
-        provider = TelegramBotProvider()
-
     try:
+        if provider is None:
+            provider = TelegramBotProvider()
         alert_result = provider.send_message(
             chat_id=chat_id,
             text=text,

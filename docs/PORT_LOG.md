@@ -7,6 +7,50 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 - Iter 13 - Hardening & finalization
+
+Final defensive audit over the complete 63-node Python port. No new workflow
+features were added; fixes are limited to fail-soft boundaries, malformed input
+guards, parser correctness, and deployment docs.
+
+**Bugs found and fixed:**
+
+1. `curate_picks.py` still used a greedy JSON-array regex and crashed on non-dict array items. Reused the balanced array walker from `parse_agent_output.py` and skipped scalar picks.
+2. `youtube_trending.py`, `cj_get_token.py`, and `cj_product_list.py` still raised at IO boundaries. They now write `ok: False` result objects and preserve downstream-safe defaults.
+3. Wrapper-style nodes (`browserbase_fetch.py`, `tavily_search_in_market.py`, `gemini_extract_product.py`, `prepare_gemini_prompt.py`, `strip_html.py`, `if_tavily_content_thin.py`, `build_tavily_query.py`) assumed unwrapped item payloads were dicts. They now skip or soft-fail malformed item shapes.
+4. `normalize_browserbase_review.py` used greedy object extraction for Gemini text and assumed prompt/Gemini pairing rows were dicts. Replaced extraction with a balanced object parser and guarded paired rows.
+5. `pick_indian_listings.py`, `pick_top_3.py`, `score_rank.py`, `filter_top_30.py`, and `llm.py` had latent bad-shape/numeric/candidate parsing crashes. Added safe coercion and dict/list guards without changing valid-input behavior.
+6. HIL Telegram edit/delete/log nodes assumed finalized callback payloads were dicts; `telegram_alert.py` created its provider outside the soft-fail try block. All now fail soft.
+
+**Tests added/updated:**
+
+- Added `tests/test_hardening_edges.py` with regression coverage for malformed item wrappers, non-dict provider results, malformed Gemini candidates, balanced JSON object extraction, CJ/Telegram fail-soft boundaries, BCC malformed posterior rows, downloader response mapping, and ranking edge cases.
+- Added `tests/test_integration_pipeline.py` for a representative all-fake `youtube_trending -> score_rank -> filter_top_30 -> curate_picks -> parse_agent_output` chain.
+- Updated legacy raise-expectation tests for YouTube/CJ IO nodes to assert fail-soft result objects.
+- Added malformed `filter_top_30` and extra `phase4_candidate_selection` coverage/stress tests.
+
+**Coverage and verification:**
+
+- Coverage before this pass: **89% total**, with several node modules below 90%.
+- Coverage after this pass: **93% total**; every `el/nodes/*.py` module is now **90%+** line coverage.
+- Suite grew from **368** to **400** tests.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m pytest tests/ -q` -> **400 passed**
+  - `.venv\Scripts\python.exe -W error -m pytest tests/ -q` -> **400 passed**
+  - `.venv\Scripts\python.exe -m compileall -q el tests` -> OK
+  - 50-run pytest loop -> **0 flakes**
+  - `python -m el --help` and `python -m el run` smoke tests -> OK
+
+**Finalization:**
+
+- Added `python -m el run` CLI entry point.
+- Rewrote `README.md` for the Python port setup, env, tests, and workflow run path.
+- Synced `.env.example` with all `config.get()` / `config.require()` call sites.
+- Fully pinned `requirements.txt`, including `pytest-cov` and transitive deps used by the test/coverage workflow.
+- Credential sweep found no leaked concrete secrets in tracked source patterns; only template/script variable names matched.
+
+---
+
 ## 2026-05-07 - Iter 12 - Phase 3c Scraped storage path (final batch — port complete)
 
 Ported the six remaining "Scraped" nodes — a parallel storage path that mirrors
@@ -762,3 +806,5 @@ Tests added (`tests/test_error_handler.py`, 6 cases): message format, 400-char t
 Start on `EL.json` proper. First node in execution order is `Every 24 Hours` (scheduleTrigger) — trivially "just run `python run.py` from cron", so skip implementing it and move on to the first real node: `YouTube Trending IN` (httpRequest to YouTube Data API v3 → top 50 IN videos). Will add `google-api-python-client` (or just `requests`, since the call is a single GET) to `requirements.txt`.
 
 Suggested iter-2 pairing: `YouTube Trending IN` + the parallel `Google Trends RSS` and `Google News RSS` fetchers (they all feed into `Fetch . Score . Dedupe . Rank`). May be one node per session if any of them turns out tricky.
+
+Port status: 63/63 (100%) — production-ready

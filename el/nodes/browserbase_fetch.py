@@ -25,6 +25,8 @@ def run(ctx: dict, *, provider: BrowserbaseProvider | None = None) -> dict:
             j = item.get('json', item)
         else:
             j = getattr(item, 'json', item)
+        if not isinstance(j, dict):
+            continue
 
         url = j.get('tavily_url') or ''
         if not url:
@@ -41,6 +43,10 @@ def run(ctx: dict, *, provider: BrowserbaseProvider | None = None) -> dict:
                     'error': str(e),
                 }
             })
+            continue
+
+        if not isinstance(fetch_result, dict):
+            results.append({'json': {**j, 'ok': False, 'error': 'Browserbase fetch failed'}})
             continue
 
         if not fetch_result.get('ok'):

@@ -25,6 +25,8 @@ def run(ctx: dict, *, provider: TavilySearchProvider | None = None) -> dict:
             j = item.get('json', item)
         else:
             j = getattr(item, 'json', item)
+        if not isinstance(j, dict):
+            continue
         tavily_query = (j.get('tavily_query') or '').strip()
 
         if not tavily_query:
@@ -43,6 +45,10 @@ def run(ctx: dict, *, provider: TavilySearchProvider | None = None) -> dict:
             })
             continue
 
+        if not isinstance(search_result, dict):
+            results.append({'json': {**j, 'ok': False, 'error': 'Tavily search failed'}})
+            continue
+
         if not search_result.get('ok'):
             results.append({
                 'json': {
@@ -54,7 +60,12 @@ def run(ctx: dict, *, provider: TavilySearchProvider | None = None) -> dict:
             continue
 
         # Return search results paired with original query metadata
-        for result in search_result.get('results', []):
+        search_results = search_result.get('results', [])
+        if not isinstance(search_results, list):
+            search_results = []
+        for result in search_results:
+            if not isinstance(result, dict):
+                continue
             result_item = {**j}  # Copy all metadata from query
             result_item.update({
                 'ok': True,

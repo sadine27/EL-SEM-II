@@ -18,6 +18,8 @@ def run(ctx: dict) -> dict:
             j = item.get('json', item)
         else:
             j = getattr(item, 'json', item)
+        if not isinstance(j, dict):
+            continue
 
         # Get HTML from Browserbase response
         html = str(j.get('content') or j.get('tavily_raw_content') or '')

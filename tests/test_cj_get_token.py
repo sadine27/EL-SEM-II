@@ -1,8 +1,6 @@
 """Tests for el/nodes/cj_get_token.py."""
 from __future__ import annotations
 
-import pytest
-
 from el.nodes import cj_get_token
 
 
@@ -30,6 +28,14 @@ def test_cj_get_token_stores_response_and_token():
     assert ctx["cj_access_token"] == "TOKEN"
 
 
-def test_cj_get_token_raises_when_token_missing():
-    with pytest.raises(RuntimeError, match="missing data.accessToken"):
-        cj_get_token.run({}, provider=FakeProvider({"data": {}}))
+def test_cj_get_token_fails_soft_when_token_missing():
+    """Regression: missing CJ token raised instead of writing an error result."""
+    ctx = cj_get_token.run({}, provider=FakeProvider({"data": {}}))
+    assert ctx["cj_get_token_result"]["ok"] is False
+    assert "missing data.accessToken" in ctx["cj_get_token_result"]["error"]
+
+
+def test_cj_get_token_handles_non_dict_response():
+    """Regression: non-dict CJ token response crashed on response.get."""
+    ctx = cj_get_token.run({}, provider=FakeProvider("not-json"))
+    assert ctx["cj_get_token_result"]["ok"] is False

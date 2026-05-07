@@ -18,11 +18,11 @@ an `error` key — same shape the original `Parse Agent Output` node produced.
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime, timezone
 
 from el import llm
 from el.logger import get_logger
+from el.nodes.parse_agent_output import _extract_first_json_array
 
 log = get_logger(__name__)
 
@@ -52,9 +52,6 @@ SYSTEM_PROMPT_TEMPLATE = (
 )
 _TODAY_PLACEHOLDER = "{today}"
 
-_JSON_ARRAY_RE = re.compile(r"\[[\s\S]*\]")
-
-
 def _today_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -67,15 +64,15 @@ def parse_agent_output(raw: str, run_date: str) -> list[dict]:
     On parse failure, return a single-element list with `error` + `raw`.
     """
     raw = raw or ""
-    match = _JSON_ARRAY_RE.search(raw)
-    if match:
+    json_text = _extract_first_json_array(str(raw))
+    if json_text:
         try:
-            picks = json.loads(match.group(0))
+            picks = json.loads(json_text)
             if isinstance(picks, list) and picks:
-                return [{"run_date": run_date, **p} for p in picks]
+                return [{"run_date": run_date, **p} for p in picks if isinstance(p, dict)]
         except json.JSONDecodeError as e:
             log.warning("Curator JSON parse failed: %s", e)
-    return [{"run_date": run_date, "error": "No picks parsed", "raw": raw[:500]}]
+    return [{"run_date": run_date, "error": "No picks parsed", "raw": str(raw)[:500]}]
 
 
 _WEB_SEARCH_TOOL = {

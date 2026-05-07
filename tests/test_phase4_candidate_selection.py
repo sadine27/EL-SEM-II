@@ -168,3 +168,49 @@ def test_run_stores_phase4_candidates():
 
     assert len(ctx["phase4_candidates"]) == 1
     assert _selection(ctx["phase4_candidates"][0])["queue_rank"] == 1
+
+
+def test_helper_edges_for_malformed_values():
+    """Regression: malformed phase4 helper inputs hit unguarded numeric/JSON branches."""
+    assert phase4_candidate_selection.to_number("not-a-number") is None
+    assert phase4_candidate_selection.to_number("1e999") == 1.0
+    assert phase4_candidate_selection.image_key("not-a-url") is None
+    assert phase4_candidate_selection.parse_raw_payload("[1, 2]") == {"raw": [1, 2]}
+    assert phase4_candidate_selection.parse_raw_payload("{bad") == {"raw": "{bad"}
+    assert phase4_candidate_selection.classify_topic_intent("BGMI gameplay") == "gaming_merch"
+    assert phase4_candidate_selection.entertainment_topic_signals("#a #b")["isEntertainment"] is True
+
+
+def test_select_candidates_applies_provider_and_total_caps():
+    """Regression: provider/total cap rejection branches were untested."""
+    cj_rows = [
+        _candidate(
+            source_topic=f"CJ Topic {i}",
+            product_name=f"Wireless Earbuds Pro {i}",
+            product_url=f"https://app.cjdropshipping.com/product/PID{i}.html",
+            image_url=f"https://img.example/cj-{i}.jpg",
+            raw_payload=json.dumps({
+                "source": "cj_dropshipping",
+                "offer": {"listedNum": 20 + i},
+                "raw_payload": {"pid": f"PID{i}", "productNameEn": f"Wireless Earbuds Pro {i}"},
+            }),
+        )
+        for i in range(7)
+    ]
+    browser_rows = [
+        _candidate(
+            source_provider="browserbase_marketplace",
+            source_topic=f"Browser Topic {i}",
+            product_name=f"Phone Case Cover {i}",
+            product_url=f"https://shop{i}.example/product/{i}",
+            image_url=f"https://img.example/browser-{i}.jpg",
+            raw_payload=json.dumps({"source": "browserbase_marketplace"}),
+        )
+        for i in range(9)
+    ]
+
+    selected_cj = phase4_candidate_selection.select_candidates(cj_rows)
+    selected = phase4_candidate_selection.select_candidates(cj_rows + browser_rows)
+
+    assert len(selected_cj) == phase4_candidate_selection.CJ_PROVIDER_CAP
+    assert len(selected) == phase4_candidate_selection.TOTAL_CAP

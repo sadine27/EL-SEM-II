@@ -18,11 +18,54 @@ def run(ctx: dict) -> dict:
     def parse_first_json_object(text: str | None) -> dict:
         if not text:
             return {}
-        try:
-            match = re.search(r'\{[\s\S]*\}', str(text))
-            return json.loads(match.group(0)) if match else {}
-        except Exception:
+        source = str(text)
+        start = source.find('{')
+        if start == -1:
             return {}
+        depth = 0
+        in_string = False
+        escape = False
+        for index in range(start, len(source)):
+            char = source[index]
+            if in_string:
+                if escape:
+                    escape = False
+                elif char == '\\':
+                    escape = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+            elif char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth == 0:
+                    try:
+                        parsed = json.loads(source[start:index + 1])
+                    except json.JSONDecodeError:
+                        return {}
+                    return parsed if isinstance(parsed, dict) else {}
+        return {}
+
+    def item_json(item: Any) -> dict:
+        if isinstance(item, dict):
+            value = item.get('json', item)
+            return value if isinstance(value, dict) else {}
+        value = getattr(item, 'json', {})
+        return value if isinstance(value, dict) else {}
+
+    def safe_row(items: Any, idx: int) -> dict:
+        if not isinstance(items, list) or idx >= len(items):
+            return {}
+        return item_json(items[idx])
+
+    def safe_get(mapping: Any, key: str, default: Any = None) -> Any:
+        return mapping.get(key, default) if isinstance(mapping, dict) else default
+
+    def safe_text_join(*parts: Any) -> str:
+        return ''.join(str(part) for part in parts if part is not None)
 
     def compact(value: str | None) -> str:
         return ' '.join((str(value or '')).split())
@@ -162,15 +205,10 @@ def run(ctx: dict) -> dict:
     out = []
 
     for idx, item in enumerate(gemini_items):
-        if isinstance(item, dict):
-            j = item.get('json', item)
-        else:
-            j = getattr(item, 'json', item)
+        j = item_json(item)
 
         # Get base metadata from prompt items (should match by order)
-        base = prompt_items[idx]['json'] if idx < len(prompt_items) else {}
-        if isinstance(prompt_items[idx] if idx < len(prompt_items) else {}, dict):
-            base = prompt_items[idx].get('json', prompt_items[idx]) if idx < len(prompt_items) else {}
+        base = safe_row(prompt_items, idx)
 
         # Check for missing URL or error conditions
         if not base.get('tavily_url') or not base.get('source_topic'):
@@ -197,7 +235,7 @@ def run(ctx: dict) -> dict:
         image_url = image_urls[0] if image_urls else None
 
         # Fallback detection for missing fields
-        fallback_text = (base.get('tavily_title') or '') + '\n' + (base.get('tavily_raw_content') or '')
+        fallback_text = safe_text_join(base.get('tavily_title') or '', '\n', base.get('tavily_raw_content') or '')
         rating = to_number(extract.get('rating')) or detect_rating(fallback_text)
         reviews_count_raw = to_number(extract.get('reviews_count')) or detect_reviews_count(fallback_text)
         reviews_count = int(round(reviews_count_raw)) if reviews_count_raw is not None else None
@@ -209,7 +247,7 @@ def run(ctx: dict) -> dict:
         has_review_signals = bool(price_text or image_url or rating is not None or reviews_count is not None)
 
         # Text analysis for matching
-        text_for_match = normalize_text(' '.join([product_name or '', fallback_text, extract.get('description') or '']))
+        text_for_match = normalize_text(' '.join([product_name or '', fallback_text, safe_get(extract, 'description') or '']))
         entity_matches = overlap_count(text_for_match, tokenize(base.get('entity_hint') or ''))
         product_matches = product_match_count(text_for_match, base.get('product_hint'))
         merch_intent = base.get('intent_mode') == 'merch' or bool(re.search(r'(merchandise|t shirt|hoodie|poster|mug|keychain|case|shirt|cover|cap)', base.get('tavily_query') or '', re.IGNORECASE))

@@ -47,6 +47,8 @@ class SupabaseHilMessageDeleteLogger:
 
 def run(ctx: dict, *, logger: HilMessageDeleteLogger | None = None) -> dict:
     callback_data = ctx.get("hil_finalized_callbacks") or {}
+    if not isinstance(callback_data, dict):
+        callback_data = {}
     review_id = callback_data.get("review_id")
     delete_result = ctx.get("delete_hil_message_result") or {}
 

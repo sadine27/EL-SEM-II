@@ -9,6 +9,8 @@ log = get_logger(__name__)
 
 def run(ctx: dict, *, provider: TelegramProvider | None = None) -> dict:
     callback_data = ctx.get("hil_finalized_callbacks") or {}
+    if not isinstance(callback_data, dict):
+        callback_data = {}
     chat_id = callback_data.get("chat_id")
     message_id = callback_data.get("message_id")
     text = callback_data.get("telegram_edit_text")

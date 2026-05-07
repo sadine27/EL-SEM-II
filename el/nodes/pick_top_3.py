@@ -30,14 +30,29 @@ def _product_name(product: dict) -> str:
     return str(product.get("productNameEn") or product.get("productName") or "")
 
 
+def _listed_num(product: dict) -> float:
+    try:
+        return float(product.get("listedNum") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def pick_products(response: dict, query: dict, limit: int = 3) -> list[dict]:
-    products = ((response.get("data") or {}).get("list") or [])
+    if not isinstance(response, dict):
+        return []
+    data = response.get("data") if isinstance(response.get("data"), dict) else {}
+    products = data.get("list") or []
+    if not isinstance(products, list):
+        return []
+    products = [product for product in products if isinstance(product, dict)]
+    if not isinstance(query, dict):
+        query = {}
     tokens = [w for w in str(query.get("keyword") or "").split() if len(w) > 2]
     strict = [
         product for product in products
         if any(token in _product_name(product).lower() for token in tokens)
     ]
-    strict.sort(key=lambda product: product.get("listedNum") or 0, reverse=True)
+    strict.sort(key=_listed_num, reverse=True)
     top = strict[:limit]
     if len(top) < limit:
         seen = {product.get("pid") for product in top}
@@ -45,7 +60,7 @@ def pick_products(response: dict, query: dict, limit: int = 3) -> list[dict]:
             product for product in products
             if product.get("pid") not in seen
         ]
-        rest.sort(key=lambda product: product.get("listedNum") or 0, reverse=True)
+        rest.sort(key=_listed_num, reverse=True)
         top = top + rest[:limit - len(top)]
     return top
 
@@ -84,6 +99,8 @@ def run(ctx: dict) -> dict:
     rows = []
     scraped_at = _now_iso()
     for item in items:
+        if not isinstance(item, dict):
+            continue
         if not item.get("ok", True):
             continue
         query = item.get("query") or {}

@@ -14,6 +14,8 @@ def run(ctx: dict, *, provider: TelegramProvider | None = None) -> dict:
         return ctx
 
     callback_data = ctx.get("hil_finalized_callbacks") or {}
+    if not isinstance(callback_data, dict):
+        callback_data = {}
     chat_id = callback_data.get("chat_id")
     message_id = callback_data.get("message_id")
 

@@ -48,11 +48,18 @@ def run(
         log.warning("CJ Product List: no cj_search_queries to fetch")
         return ctx
     if not access_token:
-        raise RuntimeError("CJ Product List requires ctx['cj_access_token']")
+        ctx["cj_product_list_responses"] = [
+            {"query": query if isinstance(query, dict) else {}, "ok": False, "error": "Missing cj_access_token"}
+            for query in queries
+        ]
+        return ctx
 
     p = provider or cj.default_provider()
     responses = []
     for index, query in enumerate(queries):
+        if not isinstance(query, dict):
+            responses.append({"query": {}, "ok": False, "error": "Invalid query item"})
+            continue
         keyword = str(query.get("keyword") or "").strip()
         if not keyword:
             continue

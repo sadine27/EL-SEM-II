@@ -63,6 +63,8 @@ def run(ctx: dict) -> dict:
             j = item.get('json', item)
         else:
             j = getattr(item, 'json', item)
+        if not isinstance(j, dict):
+            continue
         if isinstance(j, dict) and j.get('error'):
             continue
 

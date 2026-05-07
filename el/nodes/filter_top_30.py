@@ -17,16 +17,29 @@ log = get_logger(__name__)
 TOP_N = 30
 
 
+def _categories(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(cat) for cat in value if cat]
+
+
 def run(ctx: dict) -> dict:
     payload = ctx.get("ranked_payload") or {}
-    trends = (payload.get("trends") or [])[:TOP_N]
+    if not isinstance(payload, dict):
+        payload = {}
+    trends = [
+        trend for trend in (payload.get("trends") or [])
+        if isinstance(trend, dict)
+    ][:TOP_N]
 
-    scraped_at = (payload.get("metadata") or {}).get("scraped_at") or ""
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    scraped_at = metadata.get("scraped_at") or ""
     run_date = scraped_at[:10] if scraped_at else datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     topics_text = "\n".join(
-        f'{t["rank"]}. "{t["topic"]}" | intent:{t["product_intent_score"]} '
-        f'| cats:{",".join(t.get("suggested_categories") or [])} | src:{t["source"]}'
+        f'{t.get("rank", "")}. "{t.get("topic", "")}" | intent:{t.get("product_intent_score", "")} '
+        f'| cats:{",".join(_categories(t.get("suggested_categories")))} '
+        f'| src:{t.get("source", "")}'
         for t in trends
     )
 

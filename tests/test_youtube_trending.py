@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 import requests
 
 from el.nodes import youtube_trending as yt
@@ -54,18 +53,24 @@ def test_run_handles_empty_items(monkeypatch):
     assert ctx["youtube_items"] == []
 
 
-def test_run_raises_on_http_error(monkeypatch):
+def test_run_fails_soft_on_http_error(monkeypatch):
+    """Regression: YouTube HTTP errors escaped the IO boundary."""
     monkeypatch.setenv("YOUTUBE_API_KEY", "TESTKEY")
     with patch.object(yt.requests, "get") as mock_get:
         mock_get.return_value = _fake_response({}, ok=False, status_code=403)
-        with pytest.raises(requests.HTTPError):
-            yt.run({})
+        ctx = yt.run({})
+    assert ctx["youtube_items"] == []
+    assert ctx["youtube_trending_result"]["ok"] is False
+    assert "403 Error" in ctx["youtube_trending_result"]["error"]
 
 
-def test_run_requires_api_key(monkeypatch):
+def test_run_fails_soft_without_api_key(monkeypatch):
+    """Regression: missing YouTube API key raised before ctx could record failure."""
     monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
-    with pytest.raises(RuntimeError, match="YOUTUBE_API_KEY"):
-        yt.run({})
+    ctx = yt.run({})
+    assert ctx["youtube_items"] == []
+    assert ctx["youtube_trending_result"]["ok"] is False
+    assert "YOUTUBE_API_KEY" in ctx["youtube_trending_result"]["error"]
 
 
 def test_run_preserves_existing_ctx_keys(monkeypatch):
@@ -75,3 +80,13 @@ def test_run_preserves_existing_ctx_keys(monkeypatch):
         ctx = yt.run({"prior": "value"})
     assert ctx["prior"] == "value"
     assert "youtube_items" in ctx
+
+
+def test_run_handles_non_dict_json_payload(monkeypatch):
+    """Regression: non-dict YouTube JSON response crashed on payload.get."""
+    monkeypatch.setenv("YOUTUBE_API_KEY", "TESTKEY")
+    with patch.object(yt.requests, "get") as mock_get:
+        mock_get.return_value = _fake_response(["html-ish"])
+        ctx = yt.run({})
+    assert ctx["youtube_items"] == []
+    assert ctx["youtube_trending_result"]["ok"] is True

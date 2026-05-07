@@ -111,11 +111,16 @@ def parse_youtube(items: list[dict]) -> list[dict]:
     """Map YouTube `videos.list` items to the internal {topic, source, tags} shape."""
     out: list[dict] = []
     for v in items:
+        if not isinstance(v, dict):
+            continue
         sn = v.get("snippet") or {}
+        if not isinstance(sn, dict):
+            continue
         title = (sn.get("title") or "").strip()
         if title:
+            tags = sn.get("tags") if isinstance(sn.get("tags"), list) else []
             out.append({"topic": title, "source": "youtube_trending",
-                        "tags": sn.get("tags") or []})
+                        "tags": tags})
     return out
 
 

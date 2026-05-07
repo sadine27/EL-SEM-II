@@ -1,8 +1,6 @@
 """Tests for el/nodes/cj_product_list.py."""
 from __future__ import annotations
 
-import pytest
-
 from el.nodes import cj_product_list
 
 
@@ -94,7 +92,26 @@ def test_cj_product_list_skips_without_queries():
     assert ctx["cj_product_list_responses"] == []
 
 
-def test_cj_product_list_requires_token_when_queries_exist():
-    with pytest.raises(RuntimeError, match="cj_access_token"):
-        cj_product_list.run({"cj_search_queries": [{"keyword": "earbuds"}]},
-                            provider=FakeProvider())
+def test_cj_product_list_fails_soft_without_token():
+    """Regression: missing CJ access token raised instead of per-query errors."""
+    ctx = cj_product_list.run({"cj_search_queries": [{"keyword": "earbuds"}]},
+                              provider=FakeProvider())
+    assert ctx["cj_product_list_responses"] == [{
+        "query": {"keyword": "earbuds"},
+        "ok": False,
+        "error": "Missing cj_access_token",
+    }]
+
+
+def test_cj_product_list_handles_non_dict_query_item():
+    """Regression: non-dict CJ query item crashed on query.get."""
+    ctx = cj_product_list.run(
+        {"cj_access_token": "TOKEN", "cj_search_queries": [None]},
+        provider=FakeProvider(),
+        sleep=lambda _: None,
+    )
+    assert ctx["cj_product_list_responses"] == [{
+        "query": {},
+        "ok": False,
+        "error": "Invalid query item",
+    }]

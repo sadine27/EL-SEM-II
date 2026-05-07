@@ -36,6 +36,8 @@ def run(ctx: dict) -> dict:
             j = item.get('json', item)
         else:
             j = getattr(item, 'json', item)
+        if not isinstance(j, dict):
+            continue
 
         url = j.get('tavily_url') or ''
         content = str(j.get('tavily_raw_content') or '')[:60000]

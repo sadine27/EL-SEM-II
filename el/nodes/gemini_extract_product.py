@@ -41,8 +41,10 @@ def _default_gemini_extract(prompt: str, api_key: str | None = None, timeout: in
         if not candidates:
             log.warning("Gemini returned no candidates")
             return {"ok": False, "error": "No candidates in response"}
-        parts = (candidates[0].get("content") or {}).get("parts") or []
-        text = "".join(p.get("text", "") for p in parts)
+        first = candidates[0] if isinstance(candidates[0], dict) else {}
+        content = first.get("content") if isinstance(first.get("content"), dict) else {}
+        parts = content.get("parts") if isinstance(content.get("parts"), list) else []
+        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
         return {
             "ok": True,
             "statusCode": 200,
@@ -81,6 +83,8 @@ def run(ctx: dict, *, gemini_fn=None) -> dict:
             j = item.get('json', item)
         else:
             j = getattr(item, 'json', item)
+        if not isinstance(j, dict):
+            continue
 
         prompt = j.get('gemini_prompt')
         if not prompt:
@@ -100,6 +104,9 @@ def run(ctx: dict, *, gemini_fn=None) -> dict:
             continue
 
         result_item = {**j}
+        if not isinstance(extract_result, dict):
+            extract_result = {"ok": False, "error": "Gemini extraction failed"}
+
         if extract_result.get('ok'):
             result_item.update({
                 'ok': True,
