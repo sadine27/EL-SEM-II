@@ -7,6 +7,36 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 — Iter 2 — `YouTube Trending IN`
+
+**Correction to iter 1's plan:** I had predicted iter 2 would also include `Google Trends RSS` and `Google News RSS` fetchers. Those nodes do **not** exist in `EL.json`. The only Phase 1 fetcher is `YouTube Trending IN`, which feeds straight into `Fetch . Score . Dedupe . Rank`.
+
+**Mapping:**
+
+| n8n node                          | Python                                       |
+| --------------------------------- | -------------------------------------------- |
+| `YouTube Trending IN` (httpRequest) | `el/nodes/youtube_trending.py :: run(ctx)` |
+
+**API call:** `GET https://www.googleapis.com/youtube/v3/videos?chart=mostPopular&regionCode=IN&maxResults=50&part=snippet&key=$YOUTUBE_API_KEY` — identical to the n8n node, including the `httpQueryAuth` credential mapped to a `key=` query param.
+
+**Decisions:**
+- Strict env policy inside the node (`config.require("YOUTUBE_API_KEY")`) — consistent with how n8n would have failed without the credential. Pipeline-level fallback (`pipeline.py` checks `config.get` and skips with a warning if unset) so dev runs without a key still smoke-test cleanly.
+- Returns `ctx` with `ctx["youtube_items"]` = `response.json()["items"]`. Downstream `Fetch.Score.Dedupe.Rank` will read from this key.
+- 30s timeout on the GET (the n8n node had no explicit timeout but a default would still apply server-side — explicit is better than implicit).
+- `resp.raise_for_status()` lets the error handler catch & alert on 4xx/5xx with the correct node name in the Telegram message.
+
+**Tests added (`tests/test_youtube_trending.py`, 6 cases):** correct URL/params/key/timeout, ctx storage, empty-items handling, HTTP error propagation, missing-key raises, ctx key preservation.
+
+**Verification:**
+- `pytest tests/ -v` → 12/12 passing.
+- `python run.py` against the live YouTube API → 49 items fetched and stored in `ctx["youtube_items"]`.
+
+**What's next (iter 3):**
+
+The single chunky `Fetch . Score . Dedupe . Rank` Code node — likely a full iteration on its own. It consumes `ctx["youtube_items"]` and produces a ranked candidate list for Phase 2. Will probably introduce scoring constants (recency, view velocity, channel authority) — read the source carefully before porting since this is where business logic lives.
+
+---
+
 ## 2026-05-07 — Iter 0 + Iter 1 — Skeleton + Error Handler
 
 **Iter 0 — Project skeleton**
