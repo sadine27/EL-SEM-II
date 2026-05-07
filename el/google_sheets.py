@@ -9,6 +9,7 @@ import requests
 from el import config
 
 SPREADSHEET_ID = "1WVIWkLHZkNw4mqUQwnUy0j2k_5eogREcCfPySzRLn2A"
+SCRAPED_SPREADSHEET_ID = "1lLmPtyewS6SoCsgO4hwu9qOz1eUh_gVMEYuFa-IiieQ"
 SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
 SCOPES = ("https://www.googleapis.com/auth/spreadsheets",)
 DEFAULT_TIMEOUT = 30

@@ -11,6 +11,7 @@ from el import config
 
 DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
 DEFAULT_FOLDER_ID = "1M0FRJeZ6uguJSfmheWwU8hwiZe_tjVja"
+SCRAPED_FOLDER_ID = "1jihlrDk1iKxGO7v4VChrEhPphaBPfvhx"
 SCOPES = ("https://www.googleapis.com/auth/drive.file",)
 DEFAULT_TIMEOUT = 30
 

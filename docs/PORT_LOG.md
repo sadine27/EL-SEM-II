@@ -7,6 +7,47 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 - Iter 12 - Phase 3c Scraped storage path (final batch — port complete)
+
+Ported the six remaining "Scraped" nodes — a parallel storage path that mirrors
+Phase 1's Sheets/Drive/Supabase output but writes to a separate spreadsheet, a
+separate Drive folder, and the `public.scraped_products` table. Reads from
+`ctx["cj_top_products"]` (output of `Pick Top 3`).
+
+**Nodes added:**
+
+- `el/nodes/prepare_sheet_rows_scraped.py` — flattens `cj_top_products` into 19-column wide-format rows; unpacks JSON-stringified `image_urls` and `offers`; lifts first offer's fields (listedNum, supplierName, isFreeShipping → "YES"/"no", shippingCountryCodes, categoryName) up to top-level columns.
+- `el/nodes/bundle_json_scraped.py` — aggregates products into a single base64-encoded JSON file with metadata (`run_date`, `total_products`, `scraped_at`, `source_providers`) for Drive upload.
+- `el/nodes/create_day_tab_scraped.py` — Sheets `addSheet` against `SCRAPED_SPREADSHEET_ID` (`1lLmPtyewS6SoCsgO4hwu9qOz1eUh_gVMEYuFa-IiieQ`); soft-fails like Phase 1.
+- `el/nodes/sheet_append_scraped.py` — Sheets `values:append` against the scraped doc; uses `SCRAPED_SHEET_ROW_COLUMNS` so column order stays stable (n8n's `autoMapInputData` is non-deterministic for our purposes).
+- `el/nodes/drive_upload_scraped.py` — Drive multipart upload to `SCRAPED_FOLDER_ID` (`1jihlrDk1iKxGO7v4VChrEhPphaBPfvhx`); honors `ctx["scraped_drive_folder_id"]` override.
+- `el/nodes/supabase_insert_scraped.py` — REST upsert into `public.scraped_products` with conflict on `(product_url, source_topic)`; parses JSON-string fields (`image_urls`, `offers`, `raw_payload`) before upsert.
+
+**Module additions:**
+
+- `el/google_sheets.py` — added `SCRAPED_SPREADSHEET_ID` constant.
+- `el/google_drive.py` — added `SCRAPED_FOLDER_ID` constant.
+
+**Tests added (28):**
+
+- `tests/test_prepare_sheet_rows_scraped.py` (6) — flatten check, empty offers/images, malformed JSON, non-dict products, empty input, column-order contract.
+- `tests/test_bundle_json_scraped.py` (5) — bundle metadata, empty list, non-dict skip, run_date in filename, valid-JSON binary.
+- `tests/test_create_day_tab_scraped.py` (3) — create OK, provider error soft-fail, ctx preservation.
+- `tests/test_sheet_append_scraped.py` (4) — append, no-rows short-circuit, provider error, fallback title.
+- `tests/test_drive_upload_scraped.py` (4) — defaults to scraped folder, no-file short-circuit, provider error, custom folder override.
+- `tests/test_supabase_insert_scraped.py` (6) — schema/table/conflict, no-rows, provider error, non-dict skip, JSON-string parse, malformed JSON fallback.
+
+Suite: **368 passed** (up from 340).
+
+**Faithfulness notes:**
+
+- Followed Iter 11.1's defensive baseline: type-check inputs, malformed JSON falls back to defaults, IO providers soft-fail with `{"ok": False, "error": ...}` rather than raising.
+- The JS `Sheet Append (Scraped)` uses `mappingMode: autoMapInputData` (n8n picks columns dynamically from input keys). Python port pins explicit column order via `SCRAPED_SHEET_ROW_COLUMNS` for stability — output is identical when input shape matches `Prepare Sheet Rows (Scraped)`.
+
+**Port status:** **63/63 (100%)**. The functional surface of `legacy/EL.json` + `legacy/el_error_handler.json` is fully covered.
+
+---
+
 ## 2026-05-07 - Iter 11.1 - Bulletproofing the Iter 11 batch
 
 Hardening pass over the six Iter 11 nodes after a real Windows test failure surfaced a tz-database crash and an audit revealed several latent edge-case bugs.
