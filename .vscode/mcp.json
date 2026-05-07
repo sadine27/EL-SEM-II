@@ -1,0 +1,36 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "github_token",
+      "description": "GitHub Personal Access Token for GitHub MCP",
+      "password": true
+    },
+    {
+      "type": "promptString",
+      "id": "n8n_mcp_token",
+      "description": "n8n MCP bearer token",
+      "password": true
+    }
+  ],
+  "servers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${input:github_token}"
+      }
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=uatwossszmysixovsdjr&features=database,docs,debugging,development"
+    },
+    "n8n-mcp": {
+      "type": "http",
+      "url": "https://divyesh-sharma.app.n8n.cloud/mcp-server/http",
+      "headers": {
+        "Authorization": "Bearer ${input:n8n_mcp_token}"
+      }
+    }
+  }
+}
