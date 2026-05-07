@@ -7,6 +7,46 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 - Iter 9 - Tavily search and result filtering
+
+Implements the initial discovery phase: search for product opportunities via Tavily, rank results by quality and relevance.
+
+**Scope:**
+- Implement `el/nodes/build_tavily_query.py`: Generate search queries for Indian market
+- Implement `el/nodes/tavily_search_in_market.py`: HTTP POST to Tavily API with result collection
+- Implement `el/nodes/pick_indian_listings.py`: Filter and rank search results by quality score
+- Extend `el/tavily.py`: Add `include_raw_content` parameter and score capture
+
+**Mapping:**
+
+| n8n node | Python |
+| --- | --- |
+| `Build Tavily Query` | `el/nodes/build_tavily_query.py :: run(ctx)` |
+| `Tavily Search (IN Market)` | `el/nodes/tavily_search_in_market.py :: run(ctx, provider=None)` |
+| `Pick Indian Listings` | `el/nodes/pick_indian_listings.py :: run(ctx)` |
+
+**What it does:**
+- Converts ranked product opportunities into search queries optimized for Indian e-commerce (e.g., "buy X india").
+- Searches Tavily API for each query, collecting up to 10 results per query with scores and raw content.
+- Filters and ranks results by quality metrics (Tavily score, URL quality, product/entity match count, price/rating signals).
+- Picks top 3 per query: preferred (product pages + high quality), fallback (safe + moderate quality), last resort (any decent match).
+- Preserves metadata chain for downstream Browserbase extraction path.
+
+**Verification:**
+- Added `tests/test_build_tavily_query.py` (6 tests): query generation, metadata preservation, error skipping.
+- Added `tests/test_tavily_search_in_market.py` (7 tests): successful search, multiple results, provider error handling, metadata pass-through.
+- Added `tests/test_pick_indian_listings.py` (8 tests): filtering, top-3 limit, merchandise intent, quality thresholding, domain preservation.
+- `.venv\Scripts\python.exe -m pytest tests/ -v` - **248/248 passing** (was 227).
+
+**Port status:**
+- Functional nodes ported: **45/63** across `EL` + `EL Error Handler` (Iter 9 adds 3 nodes).
+- Overall workflow port: **71.4%**.
+
+**Next iter preview:**
+- Iter 10: Browserbase fallback path (`If Tavily Content Thin`, `Browserbase Fetch`, `Strip HTML`, `Prepare Gemini Prompt`, `Gemini Extract Product`, `Normalize Browserbase Review`).
+
+---
+
 ## 2026-05-07 - Iter 8 - Phase 6 message-edit branch
 
 Implements final phase of finalized-callback handling: edit the Telegram message with the final decision, and log edit/deletion events.

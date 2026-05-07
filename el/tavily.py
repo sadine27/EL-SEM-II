@@ -19,14 +19,15 @@ class TavilySearchProvider:
         self.api_key = api_key or config.require("TAVILY_API_KEY")
         self.timeout = timeout
 
-    def search(self, query: str, max_results: int = 5) -> dict:
-        """Search Tavily for query. Returns {results: [{title, url, content}, ...], error?: str}."""
+    def search(self, query: str, max_results: int = 5, include_raw_content: bool = True) -> dict:
+        """Search Tavily for query. Returns {results: [{title, url, content, score}, ...], error?: str}."""
         try:
             body = {
                 "api_key": self.api_key,
                 "query": query,
                 "max_results": max_results,
                 "include_answer": True,
+                "include_raw_content": include_raw_content,
             }
             resp = requests.post(self.BASE_URL, json=body, timeout=self.timeout)
             resp.raise_for_status()
@@ -42,6 +43,8 @@ class TavilySearchProvider:
                         "title": r.get("title", ""),
                         "url": r.get("url", ""),
                         "content": r.get("content", ""),
+                        "raw_content": r.get("raw_content", ""),
+                        "score": r.get("score", 0),
                     }
                     for r in results
                 ],
