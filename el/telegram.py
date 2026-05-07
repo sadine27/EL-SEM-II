@@ -44,6 +44,24 @@ class TelegramProvider(Protocol):
     ) -> dict:
         ...
 
+    def edit_message_text(
+        self,
+        *,
+        chat_id: str,
+        message_id: int,
+        text: str,
+        disable_web_page_preview: bool = False,
+    ) -> dict:
+        ...
+
+    def delete_message(
+        self,
+        *,
+        chat_id: str,
+        message_id: int,
+    ) -> dict:
+        ...
+
 
 class TelegramBotProvider:
     def __init__(self, token: str | None = None, timeout: int = DEFAULT_TIMEOUT):
@@ -132,6 +150,51 @@ class TelegramBotProvider:
         payload = resp.json()
         if payload.get("ok") is not True:
             raise RuntimeError(str(payload.get("description") or "Telegram answerCallbackQuery failed"))
+        return payload
+
+    def edit_message_text(
+        self,
+        *,
+        chat_id: str,
+        message_id: int,
+        text: str,
+        disable_web_page_preview: bool = False,
+    ) -> dict:
+        resp = requests.post(
+            TELEGRAM_API.format(token=self.token, method="editMessageText"),
+            json={
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": disable_web_page_preview,
+            },
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        if payload.get("ok") is not True:
+            raise RuntimeError(str(payload.get("description") or "Telegram editMessageText failed"))
+        return payload
+
+    def delete_message(
+        self,
+        *,
+        chat_id: str,
+        message_id: int,
+    ) -> dict:
+        resp = requests.post(
+            TELEGRAM_API.format(token=self.token, method="deleteMessage"),
+            json={
+                "chat_id": chat_id,
+                "message_id": message_id,
+            },
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        if payload.get("ok") is not True:
+            raise RuntimeError(str(payload.get("description") or "Telegram deleteMessage failed"))
         return payload
 
 

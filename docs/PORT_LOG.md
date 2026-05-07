@@ -7,6 +7,49 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 - Iter 8 - Phase 6 message-edit branch
+
+Implements final phase of finalized-callback handling: edit the Telegram message with the final decision, and log edit/deletion events.
+
+**Scope:**
+- Implement `el/nodes/edit_hil_message.py`: Telegram editMessageText on finalized callback
+- Implement `el/nodes/log_hil_message_edited.py`: Log edit event to `private.hil_review_events`
+- Implement `el/nodes/delete_hil_message.py`: Telegram deleteMessage fallback (on edit failure)
+- Implement `el/nodes/log_hil_message_deleted.py`: Log deletion event to `private.hil_review_events`
+- Extend `el/telegram.py`: Add `edit_message_text()` and `delete_message()` methods to TelegramProvider
+
+**Mapping:**
+
+| n8n node | Python |
+| --- | --- |
+| `Edit HIL Review Message` | `el/nodes/edit_hil_message.py :: run(ctx, provider=None)` |
+| `Log HIL Message Edited` | `el/nodes/log_hil_message_edited.py :: run(ctx, logger=None)` |
+| `Delete HIL Review Message After Edit Failure` | `el/nodes/delete_hil_message.py :: run(ctx, provider=None)` |
+| `Log HIL Message Deleted` | `el/nodes/log_hil_message_deleted.py :: run(ctx, logger=None)` |
+
+**What it does:**
+- After callback is finalized (approved/rejected/skipped), edit the original Telegram message with the decision text and disable reply buttons.
+- Log the edit operation to `hil_review_events` table with method='editMessageText' and ok status.
+- If edit fails, delete the message as fallback (cleanup on failure).
+- Log the deletion operation to `hil_review_events` table with method='deleteMessage'.
+- All operations gracefully skip if required fields missing, with result structs matching n8n error patterns.
+
+**Verification:**
+- Added `tests/test_edit_hil_message.py` (4 tests): success case, missing fields, Telegram error.
+- Added `tests/test_delete_hil_message.py` (4 tests): skip on success, execute on edit failure, missing fields, Telegram error.
+- Added `tests/test_log_hil_message_edited.py` (4 tests): success, missing review_id, logger error, insertion None.
+- Added `tests/test_log_hil_message_deleted.py` (4 tests): success, missing review_id, logger error, insertion None.
+- `.venv\Scripts\python.exe -m pytest tests/ -v` - **227/227 passing** (was 210).
+
+**Port status:**
+- Functional nodes ported: **42/63** across `EL` + `EL Error Handler` (Iter 8 adds 4 nodes).
+- Overall workflow port: **66.7%**.
+
+**Next iter preview:**
+- Iter 9+: Remaining discovery branches (Tavily→Browserbase path from `Build Tavily Query` through `Normalize Browserbase Review`, ~20 nodes remaining).
+
+---
+
 ## 2026-05-07 - Iter 7 - Curator web-search verification (Tavily tool-use loop)
 
 Enhances the Phase 2 curator with function-calling to verify product demand via web search.
