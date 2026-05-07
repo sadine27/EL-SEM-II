@@ -1,8 +1,17 @@
 """Format workflow error as Markdown message for Telegram alert."""
 from __future__ import annotations
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
+
+# IST is a fixed offset (UTC+5:30, no DST). Using a fixed offset avoids
+# depending on the IANA tz database, which is not bundled with Python on
+# Windows and would otherwise require the `tzdata` package.
+IST = timezone(timedelta(hours=5, minutes=30), name="IST")
+
+
+def _safe_dict(obj: object) -> dict:
+    """Return obj if it's a dict, else an empty dict (None-safe)."""
+    return obj if isinstance(obj, dict) else {}
 
 
 def run(ctx: dict) -> dict:
@@ -11,37 +20,33 @@ def run(ctx: dict) -> dict:
     Input: ctx["workflow_error"] — n8n error object
     Output: ctx["formatted_error"] — single item with Markdown text field
     """
-    formatted_error = []
+    formatted_error: list[dict] = []
 
-    if not ctx.get("workflow_error"):
+    raw = ctx.get("workflow_error")
+    if not raw:
         ctx["formatted_error"] = formatted_error
         return ctx
 
-    err = ctx["workflow_error"]
+    err = _safe_dict(raw)
+    inner = _safe_dict(err.get("error"))
 
-    # Extract node name from nested error structure
     node_name = (
-        err.get("error", {}).get("node", {}).get("name")
-        or err.get("error", {}).get("context", {}).get("nodeName")
-        or err.get("node", {}).get("name")
-        or err.get("context", {}).get("nodeName")
+        _safe_dict(inner.get("node")).get("name")
+        or _safe_dict(inner.get("context")).get("nodeName")
+        or _safe_dict(err.get("node")).get("name")
+        or _safe_dict(err.get("context")).get("nodeName")
         or "Unknown Node"
     )
 
-    # Extract error message — prefer error.message, then description, then JSON dump
     msg = (
-        err.get("error", {}).get("message")
+        inner.get("message")
         or err.get("message")
-        or err.get("error", {}).get("description")
+        or inner.get("description")
         or str(err.get("error", err))
     )
+    msg = str(msg)[:300]
 
-    # Truncate to 300 chars
-    msg = msg[:300]
-
-    # Build IST timestamp
-    ist_tz = ZoneInfo("Asia/Kolkata")
-    ts = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S IST")
+    ts = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
 
     # Build Markdown text
     text = (

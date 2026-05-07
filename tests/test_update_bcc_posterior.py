@@ -112,6 +112,23 @@ def test_missing_category_skips():
     assert "Missing category" in result["error"]
 
 
+def test_handles_none_decision_and_category():
+    """decision=None or category=None must not crash on .lower()/.strip()."""
+    provider = FakeSupabaseProvider()
+    ctx = {"hil_callback_decision": {"decision": None, "category": None}}
+    ubp.run(ctx, provider=provider)
+    result = ctx["bcc_update_result"]
+    assert result["ok"] is False
+
+
+def test_handles_non_dict_callback():
+    """hil_callback_decision being a non-dict must not crash."""
+    provider = FakeSupabaseProvider()
+    ctx = {"hil_callback_decision": "not-a-dict"}
+    ubp.run(ctx, provider=provider)
+    assert ctx["bcc_update_result"]["ok"] is False
+
+
 def test_provider_error_soft_fail():
     provider = FakeSupabaseProvider(should_error=True)
     ctx = {

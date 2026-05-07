@@ -7,6 +7,35 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 - Iter 11.1 - Bulletproofing the Iter 11 batch
+
+Hardening pass over the six Iter 11 nodes after a real Windows test failure surfaced a tz-database crash and an audit revealed several latent edge-case bugs.
+
+**Bugs found and fixed:**
+
+1. **`error_formatter.py` — tz crash on Windows (CRITICAL).** `ZoneInfo("Asia/Kolkata")` raised `ZoneInfoNotFoundError` on Windows where the IANA tz database isn't bundled and the `tzdata` package wasn't installed. Because this node IS the alert path, a crash here silently kills error visibility. **Fix:** IST is a fixed UTC+5:30 offset (no DST), so use `timezone(timedelta(hours=5, minutes=30))` — works everywhere with no extra dependency.
+2. **`parse_agent_output.py` — non-greedy regex breaks on nested arrays (HIGH).** The original `re.search(r"\[.*?\]", ...)` stopped at the first inner `]`, e.g. truncating `[{"tags":["a"]}]` to `["a"]`. A greedy fallback would over-match across two top-level arrays. **Fix:** replaced with `_extract_first_json_array()` — a balanced-bracket walker that respects JSON string boundaries and escapes, returning the first complete `[...]` block.
+3. **`parse_agent_output.py` — IndexError on empty payload (MEDIUM).** `ctx["ranked_payload"][0]` crashed when the list was empty or contained `None`. **Fix:** validate list shape and item types before indexing.
+4. **`bcc_calibrate_selection.py` — division by zero (MEDIUM).** A corrupted DB row with `alpha=0, beta=0` made `mu = alpha/(alpha+beta)` zero-divide, and a row missing both fields could push `n` negative. Non-numeric `quality_score` (None, string) also crashed the score arithmetic. **Fix:** clamp `alpha,beta >= 1` (treat corrupted rows as cold-start), coerce `quality_score` via `_to_float()` with a 0.0 fallback, skip non-dict candidates.
+5. **`update_bcc_posterior.py` — None decision/category crash (LOW).** `decision_item.get("decision", "").lower()` crashed if `decision` was explicitly `None` (not missing). Same for `category.strip()`. **Fix:** use `(value or "")` idiom and reject non-dict callbacks.
+6. **`telegram_alert.py` — None-item in formatted_error (LOW).** `formatted_error[0].get("text")` crashed if the first item was `None`. **Fix:** type-check before `.get()`.
+
+**Verification:**
+- Added 12 regression tests (named after the bug, with a `Regression:` docstring explaining the original failure mode):
+  - `test_error_formatter.py`: `test_ist_timestamp_works_without_tzdata`, `test_handles_none_nested_fields`, `test_handles_non_string_message` (3)
+  - `test_parse_agent_output.py`: `test_handles_nested_arrays_in_picks`, `test_handles_empty_ranked_payload_list`, `test_handles_non_dict_payload_item`, `test_picks_first_of_multiple_arrays`, `test_brackets_inside_strings_are_ignored` (5)
+  - `test_bcc_calibrate_selection.py`: `test_corrupted_zero_alpha_beta_no_division_error`, `test_non_numeric_quality_score_coerces_to_zero`, `test_skips_non_dict_candidate` (3)
+  - `test_update_bcc_posterior.py`: `test_handles_none_decision_and_category`, `test_handles_non_dict_callback` (2)
+  - `test_telegram_alert.py`: `test_handles_none_item_in_formatted_error` (1)
+- `.venv\Scripts\python.exe -m pytest tests/ -v` → **340/340 passing** (was 326 before this iter started failing on Windows; 322 passing + 4 failing).
+
+**Architecture note:**
+- Adopted "fail-soft at boundaries" consistently: every Iter 11 node now treats `None`, wrong-type, and missing fields the same way (skip / cold-start / soft-fail-with-error-result), never raising. The error-path nodes especially (error_formatter, telegram_alert) must never crash, since they're the last line of visibility into upstream failures.
+
+**Port status:** unchanged at 57/63 (90.5%). This iter is purely defensive.
+
+---
+
 ## 2026-05-07 - Iter 11 - Final batch: agent output parsing, error handling, and BCC calibration
 
 Completes the port with the final 6 nodes: LLM agent output parsing, error alert formatting and delivery, and Bayesian Beta calibration of product rankings.

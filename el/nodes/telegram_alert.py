@@ -13,12 +13,13 @@ def run(ctx: dict, *, provider: TelegramProvider | None = None) -> dict:
     """
     result = {"ok": False, "error": "No alert to send"}
 
-    if not ctx.get("formatted_error"):
+    formatted = ctx.get("formatted_error") or []
+    if not isinstance(formatted, list) or not formatted:
         ctx["telegram_alert_result"] = result
         return ctx
 
-    formatted_error = ctx["formatted_error"][0]
-    text = formatted_error.get("text", "")
+    first = formatted[0] if isinstance(formatted[0], dict) else {}
+    text = first.get("text") or ""
 
     if not text:
         result["error"] = "Missing error text"

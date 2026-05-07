@@ -16,13 +16,13 @@ def run(ctx: dict, *, provider: SupabaseRestProvider | None = None) -> dict:
     """
     result = {"ok": False, "error": "No update to perform"}
 
-    if not ctx.get("hil_callback_decision"):
+    decision_item = ctx.get("hil_callback_decision")
+    if not isinstance(decision_item, dict):
         ctx["bcc_update_result"] = result
         return ctx
 
-    decision_item = ctx["hil_callback_decision"]
-    decision = decision_item.get("decision", "").lower()
-    category = decision_item.get("category", "").strip()
+    decision = (decision_item.get("decision") or "").strip().lower()
+    category = (decision_item.get("category") or "").strip()
 
     if not category:
         result["error"] = "Missing category"
@@ -61,10 +61,18 @@ def run(ctx: dict, *, provider: SupabaseRestProvider | None = None) -> dict:
             select="category,alpha,beta",
         )
 
-        if rows:
+        if rows and isinstance(rows[0], dict):
             current = rows[0]
-            new_alpha = current.get("alpha", 1) + alpha_delta
-            new_beta = current.get("beta", 1) + beta_delta
+            try:
+                cur_alpha = float(current.get("alpha") or 1)
+            except (TypeError, ValueError):
+                cur_alpha = 1.0
+            try:
+                cur_beta = float(current.get("beta") or 1)
+            except (TypeError, ValueError):
+                cur_beta = 1.0
+            new_alpha = cur_alpha + alpha_delta
+            new_beta = cur_beta + beta_delta
         else:
             # Cold-start: insert new row
             new_alpha = 1 + alpha_delta

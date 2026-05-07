@@ -91,6 +91,49 @@ def test_missing_posteriors():
     assert ctx["calibrated_candidates"][0]["calibrated_score"] == 0.7
 
 
+def test_corrupted_zero_alpha_beta_no_division_error():
+    """A row with alpha=0, beta=0 must NOT zero-divide.
+
+    Regression: mu = alpha/(alpha+beta) and w = n/(n+N0) would crash or
+    produce NaN if a corrupted row leaks through. We clamp to the cold-start
+    prior (alpha=beta=1) instead.
+    """
+    ctx = {
+        "phase4_candidates": [{"quality_score": 70.0, "category": "X"}],
+        "bcc_posteriors": [{"category": "X", "alpha": 0, "beta": 0}],
+    }
+    bcs.run(ctx)
+    cal = ctx["calibrated_candidates"][0]["calibrated_score"]
+    # After clamping to (1,1): n=0, w=0 → cal = raw/100 = 0.7
+    assert cal == 0.7
+
+
+def test_non_numeric_quality_score_coerces_to_zero():
+    """A candidate with quality_score=None or a string must not crash."""
+    ctx = {
+        "phase4_candidates": [
+            {"quality_score": None, "category": "X"},
+            {"quality_score": "not-a-number", "category": "X"},
+        ],
+        "bcc_posteriors": [],
+    }
+    bcs.run(ctx)
+    # Both should produce calibrated_score = 0.0 (cold-start, raw=0)
+    for cand in ctx["calibrated_candidates"]:
+        assert cand["calibrated_score"] == 0.0
+
+
+def test_skips_non_dict_candidate():
+    """Malformed candidate items (e.g. None) must be skipped, not crash."""
+    ctx = {
+        "phase4_candidates": [None, {"quality_score": 50.0, "category": "X"}],
+        "bcc_posteriors": [],
+    }
+    bcs.run(ctx)
+    assert len(ctx["calibrated_candidates"]) == 1
+    assert ctx["calibrated_candidates"][0]["queue_rank"] == 1
+
+
 def test_empty_candidates():
     """Should handle empty candidate list."""
     ctx = {

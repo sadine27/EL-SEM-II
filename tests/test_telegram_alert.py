@@ -69,6 +69,13 @@ def test_handles_missing_text():
     assert "Missing error text" in result["error"]
 
 
+def test_handles_none_item_in_formatted_error():
+    """formatted_error containing None must not crash on .get()."""
+    ctx = {"formatted_error": [None]}
+    ta.run(ctx, provider=FakeTelegramProvider())
+    assert ctx["telegram_alert_result"]["ok"] is False
+
+
 def test_preserves_context():
     provider = FakeTelegramProvider()
     ctx = {
