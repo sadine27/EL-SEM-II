@@ -23,9 +23,11 @@ The entire pipeline runs serverlessly on N8N Cloud — no local Python required.
 
 ```
 EL-SEM-II/
-├── EL.json                   # Live N8N pipeline workflow (import to restore)
-├── el_error_handler.json     # N8N error-alert workflow (Telegram alerts on crash)
-├── sync_workflows.js         # Utility: exports latest workflows from N8N to this repo
+├── legacy/                   # Archived N8N workflows + tooling (project moving to Python)
+│   ├── EL.json               # Live N8N pipeline workflow (import to restore)
+│   ├── el_error_handler.json # N8N error-alert workflow (Telegram alerts on crash)
+│   ├── sync_workflows.js     # Utility: exports latest workflows from N8N to this repo
+│   └── apply_bcc_phase_i.py  # One-shot patch script for BCC-HIL Phase I edits
 ├── .env                      # Local credentials (never committed — see .gitignore)
 ├── data/
 │   └── sample_phase1_run.json
@@ -39,6 +41,15 @@ EL-SEM-II/
 │       └── Saas.pdf
 └── README.md                 # This file
 ```
+
+## Security
+
+- Keep real secrets only in local `.env`; it is ignored by Git.
+- Use `.env.example` as the checked-in template for required variables.
+- `legacy/sync_workflows.js` reads `N8N_URL` and `N8N_SECRET` from the environment instead of hardcoded credentials.
+- VS Code / GitHub Copilot MCP config lives in `.vscode/mcp.json` and prompts for sensitive MCP tokens instead of storing them in the repo.
+- Run `node scripts/secret_scan.js` to scan repo files for likely leaked credentials before sharing changes.
+- Run `powershell -ExecutionPolicy Bypass -File scripts/install_git_hooks.ps1` once to enable the repo-local pre-commit hook.
 
 ---
 
@@ -161,17 +172,17 @@ Critical nodes use `onError: continueErrorOutput`. On failure:
 
 After making changes in N8N UI, export to keep this repo in sync:
 ```bash
-node sync_workflows.js
+node legacy/sync_workflows.js
 ```
-This overwrites `EL.json` and `el_error_handler.json` with the latest live state.
+This overwrites `legacy/EL.json` and `legacy/el_error_handler.json` with the latest live state.
 
 ---
 
 ## 🔁 Restoring Workflows to N8N
 
 1. Go to [n8n.cloud](https://n8n.cloud) → **Workflows** → **Import from file**
-2. Import `EL.json` (main pipeline)
-3. Import `el_error_handler.json` (error alerts)
+2. Import `legacy/EL.json` (main pipeline)
+3. Import `legacy/el_error_handler.json` (error alerts)
 4. Recreate credentials from `.env` values (see table above)
 5. Activate both workflows ✅
 
