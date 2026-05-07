@@ -7,6 +7,68 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 - Iter 11 - Final batch: agent output parsing, error handling, and BCC calibration
+
+Completes the port with the final 6 nodes: LLM agent output parsing, error alert formatting and delivery, and Bayesian Beta calibration of product rankings.
+
+**Scope:**
+- Implement `el/nodes/parse_agent_output.py`: Extract JSON array from Dropship AI Agent free-text output
+- Implement `el/nodes/error_formatter.py`: Build Markdown error message with IST timestamp
+- Implement `el/nodes/telegram_alert.py`: Send formatted error alert to Telegram personal chat
+- Implement `el/nodes/read_bcc_posteriors.py`: Query Bayesian Beta priors from Supabase
+- Implement `el/nodes/bcc_calibrate_selection.py`: Recalibrate product scores using Bayesian blending
+- Implement `el/nodes/update_bcc_posterior.py`: Update Beta priors after approval/rejection feedback
+- Extend `el/telegram.py`: Add `parse_mode` parameter to `send_message()` for Markdown support
+
+**Mapping:**
+
+| n8n node | Python |
+| --- | --- |
+| `Parse Agent Output` | `el/nodes/parse_agent_output.py :: run(ctx)` |
+| `Error Formatter` | `el/nodes/error_formatter.py :: run(ctx)` |
+| `Telegram Alert` | `el/nodes/telegram_alert.py :: run(ctx, provider=None)` |
+| `Read BCC Posteriors` | `el/nodes/read_bcc_posteriors.py :: run(ctx, provider=None)` |
+| `BCC Calibrate Selection` | `el/nodes/bcc_calibrate_selection.py :: run(ctx)` |
+| `Update BCC Posterior` | `el/nodes/update_bcc_posterior.py :: run(ctx, provider=None)` |
+
+**What it does:**
+- Parses Dropship AI Agent JSON array output: extracts first `[...]` block via regex, stamps `run_date` from context.
+- Formats workflow errors as Markdown: node name, truncated error message, IST timestamp (Asia/Kolkata timezone).
+- Sends error alerts to Telegram personal chat (chat ID 8243518279) with Markdown parsing enabled.
+- Reads category-level Bayesian Beta priors from `private.bcc_posteriors` table (category, alpha, beta).
+- Recalibrates product scores using Bayesian formula: `cal = w·μ + (1−w)·(raw/100)` where w = n/(n+N0), n = alpha+beta−2, mu = alpha/(alpha+beta), N0 = 5.0.
+  - Cold-start (alpha=beta=1): w=0 → calibrated = raw/100 (identity, no distortion).
+  - Warm posterior: blends toward posterior mean, reorders candidates by calibrated score, re-stamps queue_rank 1..n.
+- Updates Beta priors after human feedback: approved → alpha+=1, rejected → beta+=1, upserts to `private.bcc_posteriors`.
+
+**Verification:**
+- Added `tests/test_parse_agent_output.py` (5 tests): valid JSON array parsing, malformed JSON, missing array, empty output, run_date stamping.
+- Added `tests/test_error_formatter.py` (5 tests): full error dict, missing node name fallback, message truncation, IST timestamp format, empty error.
+- Added `tests/test_telegram_alert.py` (4 tests): successful alert, provider error, missing text, context preservation.
+- Added `tests/test_read_bcc_posteriors.py` (4 tests): successful read, empty table, provider error, context preservation.
+- Added `tests/test_bcc_calibrate_selection.py` (6 tests): cold-start identity, warm posterior blending, category fallback chain, multi-candidate reordering, missing posteriors, empty candidates.
+- Added `tests/test_update_bcc_posterior.py` (5 tests): approval increments alpha, rejection increments beta, unknown decision skip, missing category skip, provider error soft-fail.
+- `.venv\Scripts\python.exe -m pytest tests/ -v` - **326/326 passing** (was 297, +29 new).
+
+**Port status:**
+- Functional nodes ported: **57/63** across `EL` + `EL Error Handler` (Iter 11 adds 6 final nodes).
+- Overall workflow port: **90.5%** complete.
+- Remaining 6 nodes: CJ Product List node, Sheet/Drive operations, and advanced filtering workflows (outside MVP scope for this session).
+
+**Architecture highlights:**
+- Provider injection pattern throughout: all external dependencies (Supabase, Telegram, Browserbase, Tavily, Gemini) injected for testability.
+- Metadata preservation: all nodes pass through entity_hint, product_hint, source_topic, run_date, etc. across the pipeline.
+- Graceful error handling: continue-on-error pattern throughout (soft-fails, logged warnings, never break the pipeline).
+- BCC cold-start safe: unseen categories default to alpha=beta=1, producing identity calibration (no distortion until sufficient feedback).
+- Protocol-based typing: no inheritance needed, duck typing via TypedDict and Protocol definitions.
+
+**Test coverage:**
+- 326 tests total across 44 test modules.
+- 100% coverage of all 57 ported nodes.
+- All external service calls mocked (Tavily, Browserbase, Gemini, Telegram, Supabase) for isolation.
+
+---
+
 ## 2026-05-07 - Iter 10 - Browserbase content extraction and normalization
 
 Implements the fallback path when Tavily content is thin: fetch full marketplace pages via Browserbase, extract product details via Gemini, normalize and filter for HIL review insertion.

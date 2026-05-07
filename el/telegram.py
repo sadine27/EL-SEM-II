@@ -30,6 +30,7 @@ class TelegramProvider(Protocol):
         chat_id: str,
         text: str,
         reply_markup: dict,
+        parse_mode: str = "HTML",
         disable_web_page_preview: bool = False,
     ) -> dict:
         ...
@@ -109,6 +110,7 @@ class TelegramBotProvider:
         chat_id: str,
         text: str,
         reply_markup: dict,
+        parse_mode: str = "HTML",
         disable_web_page_preview: bool = False,
     ) -> dict:
         resp = requests.post(
@@ -116,7 +118,7 @@ class TelegramBotProvider:
             json={
                 "chat_id": chat_id,
                 "text": text,
-                "parse_mode": "HTML",
+                "parse_mode": parse_mode,
                 "reply_markup": reply_markup,
                 "disable_web_page_preview": disable_web_page_preview,
             },
