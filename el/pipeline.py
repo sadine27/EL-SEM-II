@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from el import config
 from el.logger import get_logger
-from el.nodes import youtube_trending
+from el.nodes import score_rank, youtube_trending
 
 log = get_logger(__name__)
 
@@ -17,6 +17,8 @@ def run() -> dict:
         youtube_trending.run(ctx)
     else:
         log.warning("YOUTUBE_API_KEY not set — skipping YouTube Trending IN")
+
+    score_rank.run(ctx)
 
     log.info("EL pipeline run end (ctx keys: %s)", list(ctx.keys()))
     return ctx
