@@ -7,6 +7,43 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 — Iter 5a — Phase 1 Sheets append
+
+Ports the first storage branch downstream of `Fetch . Score . Dedupe . Rank`: create the day tab, prepare ranked-trend rows, and append those rows to Google Sheets.
+
+**Mapping:**
+
+| n8n node | Python |
+| --- | --- |
+| `Create Day Tab` (Google Sheets create sheet) | `el/nodes/create_day_tab.py :: run(ctx, provider=None)` |
+| `Prepare Sheet Rows` (Code) | `el/nodes/prepare_sheet_rows.py :: run(ctx)` |
+| `Write Rows to Sheet` (Google Sheets append) | `el/nodes/write_rows_to_sheet.py :: run(ctx, provider=None)` |
+| (new — Sheets API helper) | `el/google_sheets.py` |
+
+**Key decisions:**
+- `Prepare Sheet Rows` is credential-free and always runs after ranking, so local/dev runs still produce `ctx["sheet_rows"]` even when Google auth is absent.
+- Google-backed nodes are gated in `pipeline.py` on `GOOGLE_SERVICE_ACCOUNT_JSON`. Missing credentials log warnings and skip `Create Day Tab` / `Write Rows to Sheet` without crashing the rest of the pipeline.
+- `Create Day Tab` and `Write Rows to Sheet` accept `provider=None` and use `el/google_sheets.py` by default. Tests pass fake providers, matching the injection pattern used by the curator.
+- `google-auth` is the only new dependency. The service account JSON is read from `GOOGLE_SERVICE_ACCOUNT_JSON`, refreshed with the Sheets scope, and used with direct `requests` calls to the Sheets API.
+- The row schema/order is pinned to the n8n Code node output: `run_date`, `rank`, `topic`, `source`, `traffic_estimate`, `product_intent_score`, `related_queries`, `suggested_categories`.
+
+**Divergences vs original:**
+- n8n used OAuth credentials named `sharma divyesh api`; Python uses a service account JSON env var because that is the practical local/cron auth path.
+- n8n `continueOnFail` is modeled by catching provider errors inside `Create Day Tab` and `Write Rows to Sheet`, storing `{created: false, error: ...}` / `{ok: false, error: ...}` in `ctx`, and continuing.
+- n8n `autoMapInputData` hides Sheets column mapping. The Python API call sends values in the fixed 8-column order above (`A:H`) because the raw Sheets API has no object automap mode.
+
+**Verification:**
+- Recreated the local `.venv` enough to install requirements; the venv launcher still needs escalated execution in this sandbox because it points at a Microsoft Store Python path.
+- `.venv\Scripts\python.exe -m pip install -r requirements.txt` - installed `google-auth` and existing pinned deps.
+- `.venv\Scripts\python.exe -m pytest tests/ -v` - **76/76 passing**.
+- Stubbed pipeline coverage: `tests/test_pipeline_storage.py` asserts the pipeline prepares `ctx["sheet_rows"]` without Google credentials and wires `sheet_tab` / `sheet_append_result` when the Google env gate is present.
+
+**Next iter preview:**
+- Iter 5b should port `Prepare JSON File` + `Drive Upload`.
+- Iter 5c should port `Create Curated Picks Tab` / curated picks sheet output.
+
+---
+
 ## 2026-05-07 — Iter 4.1 — Curator prompt hardening (`b1e1151`)
 
 Follow-up to iter 4. The system-prompt template used `str.format(today=...)` and the embedded JSON example `{"rank":1,...}` was being parsed as `.format()` placeholders — fixed during iter 4 by escaping `{{...}}`, but the escaping itself is brittle (anyone editing the prompt has to remember it). Swapped to `str.replace("{today}", ...)` which doesn't parse at all, and restored the JSON example to verbatim n8n. 3 regression tests pin: (a) braces survive untouched, (b) `{today}` is the only substitution, (c) `{`/`}` counts balance. Suite: 59/59.
