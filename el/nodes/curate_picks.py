@@ -46,10 +46,11 @@ SYSTEM_PROMPT_TEMPLATE = (
     "phrases like \"merchandise\" or \"themed accessories\".\n"
     "5. Return ONLY a valid JSON array - no markdown code fences, no "
     "explanation, nothing else:\n"
-    "[{{\"rank\":1,\"topic\":\"...\",\"opportunity_score\":8.5,\"reason\":\"...\","
+    "[{\"rank\":1,\"topic\":\"...\",\"opportunity_score\":8.5,\"reason\":\"...\","
     "\"suggested_product_type\":\"...\",\"target_audience\":\"...\","
-    "\"search_query_in\":\"...\"}}]"
+    "\"search_query_in\":\"...\"}]"
 )
+_TODAY_PLACEHOLDER = "{today}"
 
 _JSON_ARRAY_RE = re.compile(r"\[[\s\S]*\]")
 
@@ -87,7 +88,7 @@ def run(ctx: dict, provider: llm.LLMProvider | None = None) -> dict:
         ctx["curated_picks"] = []
         return ctx
 
-    system = SYSTEM_PROMPT_TEMPLATE.format(today=_today_str())
+    system = SYSTEM_PROMPT_TEMPLATE.replace(_TODAY_PLACEHOLDER, _today_str())
     p = provider or llm.default_provider()
 
     log.info("curate_picks: calling %s for top-10 selection", p.name)

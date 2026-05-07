@@ -107,3 +107,36 @@ def test_run_falls_back_when_parse_fails():
     ctx = {"filtered": {"topics_text": "1. x", "run_date": "2026-05-07", "total": 1}}
     cp.run(ctx, provider=fake)
     assert ctx["curated_picks"][0]["error"] == "No picks parsed"
+
+
+def test_system_prompt_preserves_json_example_braces_verbatim():
+    """Regression: the JSON example must reach the model with single braces,
+    not doubled. Substitution uses str.replace, not str.format, so curly
+    braces in the template are never interpreted as placeholders."""
+    fake = FakeProvider(output="[]")
+    ctx = {"filtered": {"topics_text": "1. x", "run_date": "2026-05-07", "total": 1}}
+    cp.run(ctx, provider=fake)
+    system, _ = fake.calls[0]
+    assert '[{"rank":1,"topic":"...","opportunity_score":8.5' in system
+    assert '"search_query_in":"..."}]' in system
+    assert "{{" not in system and "}}" not in system
+
+
+def test_system_prompt_substitutes_today_only():
+    """The only placeholder ever substituted is {today}. No other token
+    in the template should be interpreted or mutated."""
+    fake = FakeProvider(output="[]")
+    ctx = {"filtered": {"topics_text": "1. x", "run_date": "2026-05-07", "total": 1}}
+    cp.run(ctx, provider=fake)
+    system, _ = fake.calls[0]
+    assert "{today}" not in system
+    assert "Today's date is 20" in system  # substituted with current UTC date
+
+
+def test_system_prompt_template_renders_with_arbitrary_braces():
+    """Direct call to confirm the template would survive even if the JSON
+    example grew more braces. Guards against future format() regressions."""
+    rendered = cp.SYSTEM_PROMPT_TEMPLATE.replace("{today}", "2026-05-07")
+    assert "Today's date is 2026-05-07" in rendered
+    # any other curlies must pass through untouched
+    assert rendered.count("{") == rendered.count("}")
