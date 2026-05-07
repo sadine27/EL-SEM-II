@@ -1,15 +1,15 @@
 """LLM provider abstraction.
 
-A thin shim so nodes can call `provider.generate(system, user)` without caring
-which API is on the other end. Iter 4 ships only `GeminiProvider`; an OpenAI
-or Mistral provider would slot in as another class implementing `LLMProvider`.
+Two tiers:
+- `LLMProvider`: single-shot generation (no tools, no chat history)
+- `LLMAgentProvider`: function-calling loop for tool-use workflows
 
-Single-shot only — no tool-use loops, no chat memory. Those are separate
-ports (the n8n original used a LangChain agent with a Tavily tool node and
-Postgres chat memory; both will be reintroduced in later iterations).
+Iter 4 shipped `GeminiProvider` (single-shot). Iter 7 adds `GeminiAgentProvider`
+for the curator's web-search loop. Postgres chat memory deferred to iter 8+.
 """
 from __future__ import annotations
 
+import json
 from typing import Protocol
 
 import requests
@@ -62,6 +62,118 @@ class GeminiProvider:
         return "".join(p.get("text", "") for p in parts)
 
 
+class LLMAgentProvider(Protocol):
+    """LLM with function-calling support for tool-use loops."""
+    name: str
+
+    def call_with_tools(self, system: str, user: str, tools: list[dict], max_turns: int = 5) -> str:
+        """Call model with tools. Returns final text response after tool loop."""
+        ...
+
+
+class GeminiAgentProvider:
+    """Gemini with function-calling for curator web-search verification."""
+
+    name = "gemini-agent"
+    BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+    DEFAULT_TIMEOUT = 60
+
+    def __init__(self, model: str = "gemini-2.5-flash", api_key: str | None = None,
+                 timeout: int = DEFAULT_TIMEOUT, tavily_provider: object | None = None):
+        self.model = model
+        self.api_key = api_key or config.require("GEMINI_API_KEY")
+        self.timeout = timeout
+        self._tavily_provider = tavily_provider
+
+    def _get_tavily_provider(self):
+        """Lazy-load Tavily provider to avoid import cycle."""
+        if self._tavily_provider is None:
+            from el import tavily
+            self._tavily_provider = tavily.default_provider()
+        return self._tavily_provider
+
+    def call_with_tools(self, system: str, user: str, tools: list[dict], max_turns: int = 5) -> str:
+        """Run function-calling loop: call model → execute tools → loop until done."""
+        url = f"{self.BASE_URL}/{self.model}:generateContent"
+        contents = [{"role": "user", "parts": [{"text": user}]}]
+        turn = 0
+
+        while turn < max_turns:
+            turn += 1
+            body = {
+                "systemInstruction": {"parts": [{"text": system}]},
+                "contents": contents,
+                "tools": [{"function_declarations": tools}] if tools else [],
+            }
+            resp = requests.post(
+                url,
+                params={"key": self.api_key},
+                json=body,
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            candidates = data.get("candidates") or []
+            if not candidates:
+                log.warning("Gemini returned no candidates on turn %d", turn)
+                return ""
+
+            content = candidates[0].get("content") or {}
+            parts = content.get("parts") or []
+
+            # Check for tool use
+            tool_calls = [p for p in parts if "functionCall" in p]
+            if not tool_calls:
+                # No more tool calls — extract final text response
+                text_parts = [p.get("text", "") for p in parts if "text" in p]
+                return "".join(text_parts)
+
+            # Execute tool calls and append results to conversation
+            tool_results = []
+            for part in tool_calls:
+                func_call = part.get("functionCall", {})
+                func_name = func_call.get("name", "")
+                func_args = func_call.get("args", {})
+
+                if func_name == "web_search":
+                    query = func_args.get("query", "")
+                    result = self._execute_web_search(query)
+                    tool_results.append({
+                        "functionResponse": {
+                            "name": "web_search",
+                            "response": result,
+                        }
+                    })
+                else:
+                    log.warning("Unknown tool: %s", func_name)
+
+            # Add assistant response and tool results back to contents
+            contents.append({"role": "model", "parts": parts})
+            contents.append({"role": "user", "parts": tool_results})
+
+        log.warning("Curator agent loop reached max turns (%d)", max_turns)
+        return ""
+
+    def _execute_web_search(self, query: str) -> dict:
+        """Execute web_search tool via Tavily."""
+        tavily = self._get_tavily_provider()
+        result = tavily.search(query, max_results=3)
+        return {
+            "query": query,
+            "found": result.get("ok", False),
+            "answer": result.get("answer", ""),
+            "sources": [
+                {"title": r.get("title", ""), "url": r.get("url", "")}
+                for r in result.get("results", [])
+            ],
+        }
+
+
 def default_provider() -> LLMProvider:
     """Return the configured provider. Currently Gemini-only."""
     return GeminiProvider()
+
+
+def default_agent_provider() -> LLMAgentProvider:
+    """Return the configured agent provider (with function-calling)."""
+    return GeminiAgentProvider()

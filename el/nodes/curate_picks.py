@@ -78,7 +78,26 @@ def parse_agent_output(raw: str, run_date: str) -> list[dict]:
     return [{"run_date": run_date, "error": "No picks parsed", "raw": raw[:500]}]
 
 
-def run(ctx: dict, provider: llm.LLMProvider | None = None) -> dict:
+_WEB_SEARCH_TOOL = {
+    "name": "web_search",
+    "description": (
+        "Search the web for current product demand, pricing, and competition in the Indian market. "
+        "Use this to verify if a trending topic has real buyer demand for products."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Search query about the topic and product demand (e.g., 'wireless earbuds india market demand 2026')",
+            }
+        },
+        "required": ["query"],
+    },
+}
+
+
+def run(ctx: dict, provider: llm.LLMProvider | None = None, agent_provider: llm.LLMAgentProvider | None = None) -> dict:
     filtered = ctx.get("filtered") or {}
     topics_text = filtered.get("topics_text") or ""
     run_date = filtered.get("run_date") or _today_str()
@@ -89,13 +108,33 @@ def run(ctx: dict, provider: llm.LLMProvider | None = None) -> dict:
         return ctx
 
     system = SYSTEM_PROMPT_TEMPLATE.replace(_TODAY_PLACEHOLDER, _today_str())
-    p = provider or llm.default_provider()
 
-    log.info("curate_picks: calling %s for top-10 selection", p.name)
-    output = p.generate(system, topics_text)
+    # Use agent provider (with web search) if available and Tavily is configured
+    if agent_provider is None and _should_use_agent():
+        try:
+            agent_provider = llm.default_agent_provider()
+        except RuntimeError as e:
+            log.warning("Could not create agent provider: %s — falling back to single-shot", e)
+            agent_provider = None
+
+    if agent_provider is not None:
+        log.info("curate_picks: calling %s with web_search verification", agent_provider.name)
+        output = agent_provider.call_with_tools(system, topics_text, [_WEB_SEARCH_TOOL], max_turns=5)
+    else:
+        # Fallback to single-shot if no agent provider or Tavily unavailable
+        p = provider or llm.default_provider()
+        log.info("curate_picks: calling %s for top-10 selection (no web search)", p.name)
+        output = p.generate(system, topics_text)
+
     picks = parse_agent_output(output, run_date)
 
     log.info("curate_picks: parsed %d picks (errors: %s)",
              len(picks), any("error" in pk for pk in picks))
     ctx["curated_picks"] = picks
     return ctx
+
+
+def _should_use_agent() -> bool:
+    """Check if Tavily API key is configured for web search."""
+    from el import config
+    return config.get("TAVILY_API_KEY") is not None

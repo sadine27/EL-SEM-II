@@ -85,3 +85,68 @@ def test_default_provider_returns_gemini(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "TESTKEY")
     p = llm.default_provider()
     assert p.name == "gemini"
+
+
+def test_gemini_agent_provider_no_tool_use_returns_text(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "TESTKEY")
+    monkeypatch.setenv("TAVILY_API_KEY", "TAVILY_KEY")
+    payload = {
+        "candidates": [{"content": {"parts": [{"text": "Final answer"}]}}]
+    }
+    with patch.object(llm.requests, "post") as mock_post:
+        mock_post.return_value = _fake_response(payload)
+        agent = llm.GeminiAgentProvider()
+        out = agent.call_with_tools("sys", "user", [{"name": "web_search"}])
+    assert out == "Final answer"
+    assert mock_post.call_count == 1
+
+
+def test_gemini_agent_provider_tool_call_executes_web_search(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "TESTKEY")
+    monkeypatch.setenv("TAVILY_API_KEY", "TAVILY_KEY")
+
+    turn1_payload = {
+        "candidates": [{
+            "content": {"parts": [
+                {"functionCall": {
+                    "name": "web_search",
+                    "args": {"query": "wireless earbuds india market"}
+                }}
+            ]}
+        }]
+    }
+    turn2_payload = {
+        "candidates": [{
+            "content": {"parts": [{"text": "High demand found"}]}
+        }]
+    }
+
+    call_count = [0]
+    def fake_post(*args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return _fake_response(turn1_payload)
+        else:
+            return _fake_response(turn2_payload)
+
+    fake_tavily = MagicMock()
+    fake_tavily.search.return_value = {
+        "ok": True,
+        "answer": "Growing market",
+        "results": [{"title": "News", "url": "http://example.com"}],
+    }
+
+    with patch.object(llm.requests, "post", side_effect=fake_post):
+        agent = llm.GeminiAgentProvider(tavily_provider=fake_tavily)
+        out = agent.call_with_tools("sys", "user", [{"name": "web_search"}], max_turns=3)
+
+    assert out == "High demand found"
+    assert call_count[0] == 2
+    fake_tavily.search.assert_called_once()
+
+
+def test_default_agent_provider_returns_gemini_agent(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "TESTKEY")
+    monkeypatch.setenv("TAVILY_API_KEY", "TAVILY_KEY")
+    p = llm.default_agent_provider()
+    assert p.name == "gemini-agent"

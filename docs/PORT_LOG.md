@@ -7,6 +7,55 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 - Iter 7 - Curator web-search verification (Tavily tool-use loop)
+
+Enhances the Phase 2 curator with function-calling to verify product demand via web search.
+
+**Scope:**
+- Refactor `el/llm.py` to support function-calling (new `GeminiAgentProvider`, `LLMAgentProvider` protocol)
+- Implement `el/tavily.py`: Tavily Search API wrapper for product-market verification
+- Update `el/nodes/curate_picks.py`: Use agent provider with web-search loop
+- Graceful fallback to single-shot if Tavily unavailable
+
+**Mapping:**
+
+| Component | What it does |
+| --- | --- |
+| `el/tavily.py :: TavilySearchProvider` | Tavily API integration (search queries, parse results, error handling) |
+| `el/llm.py :: GeminiAgentProvider` | Gemini function-calling loop (web_search tool, max 5 turns) |
+| `el/nodes/curate_picks.py :: run(...)` | Wired to use agent if `TAVILY_API_KEY` set, fallback to single-shot |
+
+**What it does:**
+- Curator system prompt already instructs model to "use web_search to verify current demand, pricing and competition".
+- `GeminiAgentProvider.call_with_tools(system, user, [web_search_tool], max_turns=5)` runs the loop:
+  1. Call Gemini with tools parameter
+  2. If model calls `web_search(query)`, execute via Tavily, return results
+  3. Loop until model returns final JSON array (no more tool calls)
+  4. Return final text response
+- Curator picks now include web-verified signals.
+
+**Divergences vs original:**
+- n8n used LangChain agent loop. Python uses Gemini's native function-calling (simpler, no dependency).
+- Tool calls structured as Gemini's `functionCall` parts; results mapped back via `functionResponse`.
+- Tavily API used instead of LangChain Tavily node (same underlying service).
+
+**Verification:**
+- Added `tests/test_tavily.py` (3 tests): successful search, error handling, missing API key.
+- Added `tests/test_llm.py` enhancements (3 tests): agent provider no-tool path, tool-call loop with execution, default_agent_provider().
+- Updated `tests/test_curate_picks.py` (2 tests): uses agent when Tavily configured, falls back to single-shot.
+- `.venv\Scripts\python.exe -m pytest tests/ -v` - **231/231 passing** (was 202).
+
+**Port status:**
+- Functional nodes ported: **38/63** across `EL` + `EL Error Handler` (node count unchanged; Iter 7 enhances existing curator node).
+- Overall workflow port: **~60.3%** (unchanged).
+- **LLM capability upgrade:** Curator now does web-verified product discovery (Iter 4 was single-shot).
+
+**Next iter preview:**
+- Iter 8: Continue Phase 6 message-edit nodes (`Edit HIL Review Message`, `Log HIL Message Edited`, etc.)
+- Iter 8+: Remaining discovery branches (Tavily→Browserbase path from `Build Tavily Query` through `Normalize Browserbase Review`).
+
+---
+
 ## 2026-05-07 - Iter 6d - Callback apply/answer gate
 
 Continues Phase 6 callback handling after `Parse HIL Callback`.

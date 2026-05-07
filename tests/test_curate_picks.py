@@ -17,6 +17,10 @@ class FakeProvider:
         self.calls.append((system, user))
         return self.output
 
+    def call_with_tools(self, system: str, user: str, tools: list, max_turns: int = 5) -> str:
+        self.calls.append((system, user))
+        return self.output
+
 
 def _picks_json(n: int = 2) -> str:
     return json.dumps([
@@ -140,3 +144,23 @@ def test_system_prompt_template_renders_with_arbitrary_braces():
     assert "Today's date is 2026-05-07" in rendered
     # any other curlies must pass through untouched
     assert rendered.count("{") == rendered.count("}")
+
+
+def test_run_uses_agent_provider_when_tavily_configured(monkeypatch):
+    monkeypatch.setenv("TAVILY_API_KEY", "test-key")
+    fake_agent = FakeProvider(output=_picks_json(1))
+    ctx = {"filtered": {"topics_text": "1. x", "run_date": "2026-05-07", "total": 1}}
+    cp.run(ctx, agent_provider=fake_agent)
+    assert len(fake_agent.calls) == 1
+    system, user = fake_agent.calls[0]
+    assert "dropshipping product curator" in system
+    assert user == "1. x"
+
+
+def test_run_falls_back_to_single_shot_without_tavily(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    fake_provider = FakeProvider(output=_picks_json(1))
+    ctx = {"filtered": {"topics_text": "1. x", "run_date": "2026-05-07", "total": 1}}
+    cp.run(ctx, provider=fake_provider)
+    assert len(fake_provider.calls) == 1
+    assert ctx["curated_picks"][0]["topic"] == "t0"
