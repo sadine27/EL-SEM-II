@@ -7,6 +7,58 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 - Iter 10 - Browserbase content extraction and normalization
+
+Implements the fallback path when Tavily content is thin: fetch full marketplace pages via Browserbase, extract product details via Gemini, normalize and filter for HIL review insertion.
+
+**Scope:**
+- Implement `el/nodes/if_tavily_content_thin.py`: Conditional split by content length < 500
+- Implement `el/nodes/browserbase_fetch.py`: HTTP POST to Browserbase API for full page content
+- Implement `el/nodes/strip_html.py`: Remove HTML tags, scripts, styles from fetched content
+- Implement `el/nodes/prepare_gemini_prompt.py`: Build system prompt + page content for Gemini extraction
+- Implement `el/nodes/gemini_extract_product.py`: HTTP POST to Gemini API with JSON response mode
+- Implement `el/nodes/normalize_browserbase_review.py`: Parse, validate, normalize extracted data and build HIL schema
+- Extend `el/browserbase.py`: New Browserbase API provider
+
+**Mapping:**
+
+| n8n node | Python |
+| --- | --- |
+| `If Tavily Content Thin` | `el/nodes/if_tavily_content_thin.py :: run(ctx)` |
+| `Browserbase Fetch` | `el/nodes/browserbase_fetch.py :: run(ctx, provider=None)` |
+| `Strip HTML` | `el/nodes/strip_html.py :: run(ctx)` |
+| `Prepare Gemini Prompt` | `el/nodes/prepare_gemini_prompt.py :: run(ctx)` |
+| `Gemini Extract Product` | `el/nodes/gemini_extract_product.py :: run(ctx, gemini_fn=None)` |
+| `Normalize Browserbase Review` | `el/nodes/normalize_browserbase_review.py :: run(ctx)` |
+
+**What it does:**
+- Splits listings by Tavily content length: thin (< 500 chars) → Browserbase path, thick (>= 500 chars) → fallback to sheet.
+- Fetches full marketplace pages via Browserbase API with automatic redirects and proxy handling.
+- Strips HTML/scripts/styles to clean text, collapses whitespace, truncates to 60K chars.
+- Prepares system prompt for Gemini extraction: "extract one product listing from Indian marketplace page. Return JSON with product_name, price_inr, rating, image_urls, is_product_page, etc."
+- Calls Gemini 2.5 Flash with JSON response mode, temperature 0.1 for structured extraction.
+- Normalizes extracted data: parses Gemini JSON, applies fallback detection (price/rating/reviews from page text), filters invalid results.
+- Filtering rules: requires product_name + (is_product_page OR has_review_signals), no 404s, no books for merch intent, price >= 20, excludes bad URLs.
+- Outputs HIL review schema items ready for insertion to Supabase `hil_reviews` table.
+
+**Verification:**
+- Added `tests/test_if_tavily_content_thin.py` (5 tests): threshold split, missing length, metadata preservation, boundaries.
+- Added `tests/test_strip_html.py` (8 tests): HTML removal, script/style stripping, comment removal, whitespace collapse, truncation, flags, metadata.
+- Added `tests/test_prepare_gemini_prompt.py` (8 tests): prompt building, system instructions, thin content skip, missing URL skip, domain detection, metadata preservation, content truncation.
+- Added `tests/test_browserbase_fetch.py` (8 tests): successful fetch, provider errors, missing URL, no provider fallback, multiple fetches, API errors, metadata preservation.
+- Added `tests/test_gemini_extract_product.py` (7 tests): prompt handling, skip on missing prompt, error handling, metadata preservation, exception handling, multiple extracts, empty.
+- Added `tests/test_normalize_browserbase_review.py` (15 tests): schema building, missing product name, 404 filtering, book filtering, price/image requirement, low price filtering, price/rating/reviews detection, image URL filtering, merchandise intent matching, payload preservation, missing response, availability detection.
+- `.venv\Scripts\python.exe -m pytest tests/ -v` - **297/297 passing** (was 248, +49 new).
+
+**Port status:**
+- Functional nodes ported: **51/63** across `EL` + `EL Error Handler` (Iter 10 adds 6 nodes).
+- Overall workflow port: **80.9%**.
+
+**Next iter preview:**
+- Iter 11+: Remaining nodes (~12 nodes for Supabase storage, messaging, and wrap-up flows).
+
+---
+
 ## 2026-05-07 - Iter 9 - Tavily search and result filtering
 
 Implements the initial discovery phase: search for product opportunities via Tavily, rank results by quality and relevance.
