@@ -7,6 +7,12 @@ Source workflows: `legacy/EL.json` (70 nodes), `legacy/el_error_handler.json` (3
 
 ---
 
+## 2026-05-07 — Iter 4.1 — Curator prompt hardening (`b1e1151`)
+
+Follow-up to iter 4. The system-prompt template used `str.format(today=...)` and the embedded JSON example `{"rank":1,...}` was being parsed as `.format()` placeholders — fixed during iter 4 by escaping `{{...}}`, but the escaping itself is brittle (anyone editing the prompt has to remember it). Swapped to `str.replace("{today}", ...)` which doesn't parse at all, and restored the JSON example to verbatim n8n. 3 regression tests pin: (a) braces survive untouched, (b) `{today}` is the only substitution, (c) `{`/`}` counts balance. Suite: 59/59.
+
+---
+
 ## 2026-05-07 — Iter 4 — `Filter Top 30` + Curator (single-shot Gemini)
 
 The first LLM iteration. Ports the front of the Phase 2 AI curator chain. **Scope was narrowed deliberately** — the n8n original is a LangChain agent loop with a Tavily web-search tool node and Postgres chat memory, none of which can be ported as one iter without doing a half-decent job on three things at once. So iter 4 gets the prompt, the model call, and the parser; iter 5+ will reintroduce tool-use and memory.
