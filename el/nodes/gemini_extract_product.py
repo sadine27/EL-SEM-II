@@ -1,18 +1,19 @@
-"""Extract product details from marketplace content via Gemini API."""
+"""Extract product details from marketplace content via Gemini (Vertex AI)."""
 from __future__ import annotations
 
 import requests
 
-from el import config
+from el import llm
 from el.logger import get_logger
 
 log = get_logger(__name__)
 
 
-def _default_gemini_extract(prompt: str, api_key: str | None = None, timeout: int = 60) -> dict:
-    """Call Gemini API with JSON extraction mode."""
-    api_key = api_key or config.require("GEMINI_API_KEY")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+def _default_gemini_extract(prompt: str, auth: "llm.VertexAuth | None" = None,
+                            model: str = "gemini-2.5-flash", timeout: int = 60) -> dict:
+    """Call Gemini (Vertex AI) with JSON extraction mode."""
+    if auth is None:
+        auth = llm.default_vertex_auth()
     body = {
         "generationConfig": {
             "responseMimeType": "application/json",
@@ -30,8 +31,11 @@ def _default_gemini_extract(prompt: str, api_key: str | None = None, timeout: in
     }
     try:
         resp = requests.post(
-            url,
-            params={"key": api_key},
+            llm.vertex_url(auth, model),
+            headers={
+                "Authorization": f"Bearer {auth.get_token()}",
+                "Content-Type": "application/json",
+            },
             json=body,
             timeout=timeout,
         )

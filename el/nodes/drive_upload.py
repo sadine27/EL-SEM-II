@@ -43,11 +43,24 @@ def run(ctx: dict, provider: google_drive.DriveProvider | None = None) -> dict:
         }
         log.info("Drive Upload: uploaded %s to folder %s", filename, folder_id)
     except Exception as exc:
-        ctx["drive_upload_result"] = {
-            "ok": False,
-            "uploaded": False,
-            "folder_id": folder_id,
-            "error": str(exc),
-        }
-        log.warning("Drive Upload failed; continuing: %s", exc)
+        body = getattr(getattr(exc, "response", None), "text", "") or ""
+        if "storageQuotaExceeded" in body:
+            ctx["drive_upload_result"] = {
+                "ok": True,
+                "uploaded": False,
+                "skipped": "sa_no_quota",
+                "folder_id": folder_id,
+            }
+            log.info(
+                "Drive Upload: skipped (service accounts have no personal-Drive quota; "
+                "JSON archive not stored remotely)"
+            )
+        else:
+            ctx["drive_upload_result"] = {
+                "ok": False,
+                "uploaded": False,
+                "folder_id": folder_id,
+                "error": str(exc),
+            }
+            log.warning("Drive Upload failed; continuing: %s", exc)
     return ctx

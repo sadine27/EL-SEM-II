@@ -4,8 +4,9 @@ Two tiers:
 - `LLMProvider`: single-shot generation (no tools, no chat history)
 - `LLMAgentProvider`: function-calling loop for tool-use workflows
 
-Iter 4 shipped `GeminiProvider` (single-shot). Iter 7 adds `GeminiAgentProvider`
-for the curator's web-search loop. Postgres chat memory deferred to iter 8+.
+Iter 14 swapped from AI Studio (`generativelanguage.googleapis.com` + API key)
+to Vertex AI (`aiplatform.googleapis.com` + service-account OAuth). Body schema
+and model IDs are unchanged — only the host and auth header differ.
 """
 from __future__ import annotations
 
@@ -19,6 +20,47 @@ from el.logger import get_logger
 
 log = get_logger(__name__)
 
+_VERTEX_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+
+
+class VertexAuth:
+    """Mints + caches OAuth tokens for Vertex AI from the configured SA JSON."""
+
+    def __init__(self, sa_info: dict | None = None, location: str | None = None):
+        if sa_info is None:
+            sa_info = json.loads(config.require("GOOGLE_SERVICE_ACCOUNT_JSON"))
+        self._sa_info = sa_info
+        self.project_id = sa_info.get("project_id", "")
+        self.location = location or config.get("VERTEX_LOCATION", "global")
+        self._creds = None
+
+    def get_token(self) -> str:
+        from google.auth.transport.requests import Request
+        from google.oauth2 import service_account
+        if self._creds is None:
+            self._creds = service_account.Credentials.from_service_account_info(
+                self._sa_info, scopes=[_VERTEX_SCOPE]
+            )
+        if not self._creds.valid:
+            self._creds.refresh(Request())
+        return self._creds.token
+
+
+def vertex_url(auth: VertexAuth, model: str) -> str:
+    host = (
+        "https://aiplatform.googleapis.com"
+        if auth.location == "global"
+        else f"https://{auth.location}-aiplatform.googleapis.com"
+    )
+    return (
+        f"{host}/v1/projects/{auth.project_id}/locations/{auth.location}"
+        f"/publishers/google/models/{model}:generateContent"
+    )
+
+
+def default_vertex_auth() -> VertexAuth:
+    return VertexAuth()
+
 
 class LLMProvider(Protocol):
     name: str
@@ -28,27 +70,28 @@ class LLMProvider(Protocol):
 
 
 class GeminiProvider:
-    """Google Generative Language API — `generateContent` REST endpoint."""
+    """Gemini via Vertex AI `generateContent` REST endpoint."""
 
     name = "gemini"
-    BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
     DEFAULT_TIMEOUT = 60
 
-    def __init__(self, model: str = "gemini-2.5-flash", api_key: str | None = None,
+    def __init__(self, model: str = "gemini-2.5-flash", auth: VertexAuth | None = None,
                  timeout: int = DEFAULT_TIMEOUT):
         self.model = model
-        self.api_key = api_key or config.require("GEMINI_API_KEY")
+        self.auth = auth or default_vertex_auth()
         self.timeout = timeout
 
     def generate(self, system: str, user: str) -> str:
-        url = f"{self.BASE_URL}/{self.model}:generateContent"
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
         }
         resp = requests.post(
-            url,
-            params={"key": self.api_key},
+            vertex_url(self.auth, self.model),
+            headers={
+                "Authorization": f"Bearer {self.auth.get_token()}",
+                "Content-Type": "application/json",
+            },
             json=body,
             timeout=self.timeout,
         )
@@ -69,34 +112,30 @@ class LLMAgentProvider(Protocol):
     name: str
 
     def call_with_tools(self, system: str, user: str, tools: list[dict], max_turns: int = 5) -> str:
-        """Call model with tools. Returns final text response after tool loop."""
         ...
 
 
 class GeminiAgentProvider:
-    """Gemini with function-calling for curator web-search verification."""
+    """Gemini with function-calling for curator web-search verification (Vertex AI)."""
 
     name = "gemini-agent"
-    BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
     DEFAULT_TIMEOUT = 60
 
-    def __init__(self, model: str = "gemini-2.5-flash", api_key: str | None = None,
+    def __init__(self, model: str = "gemini-2.5-flash", auth: VertexAuth | None = None,
                  timeout: int = DEFAULT_TIMEOUT, tavily_provider: object | None = None):
         self.model = model
-        self.api_key = api_key or config.require("GEMINI_API_KEY")
+        self.auth = auth or default_vertex_auth()
         self.timeout = timeout
         self._tavily_provider = tavily_provider
 
     def _get_tavily_provider(self):
-        """Lazy-load Tavily provider to avoid import cycle."""
         if self._tavily_provider is None:
             from el import tavily
             self._tavily_provider = tavily.default_provider()
         return self._tavily_provider
 
     def call_with_tools(self, system: str, user: str, tools: list[dict], max_turns: int = 5) -> str:
-        """Run function-calling loop: call model → execute tools → loop until done."""
-        url = f"{self.BASE_URL}/{self.model}:generateContent"
+        url = vertex_url(self.auth, self.model)
         contents = [{"role": "user", "parts": [{"text": user}]}]
         turn = 0
 
@@ -109,7 +148,10 @@ class GeminiAgentProvider:
             }
             resp = requests.post(
                 url,
-                params={"key": self.api_key},
+                headers={
+                    "Authorization": f"Bearer {self.auth.get_token()}",
+                    "Content-Type": "application/json",
+                },
                 json=body,
                 timeout=self.timeout,
             )
@@ -124,14 +166,11 @@ class GeminiAgentProvider:
             content = first.get("content") if isinstance(first.get("content"), dict) else {}
             parts = content.get("parts") if isinstance(content.get("parts"), list) else []
 
-            # Check for tool use
             tool_calls = [p for p in parts if isinstance(p, dict) and "functionCall" in p]
             if not tool_calls:
-                # No more tool calls — extract final text response
                 text_parts = [p.get("text", "") for p in parts if isinstance(p, dict) and "text" in p]
                 return "".join(text_parts)
 
-            # Execute tool calls and append results to conversation
             tool_results = []
             for part in tool_calls:
                 func_call = part.get("functionCall", {})
@@ -154,7 +193,6 @@ class GeminiAgentProvider:
                 else:
                     log.warning("Unknown tool: %s", func_name)
 
-            # Add assistant response and tool results back to contents
             contents.append({"role": "model", "parts": parts})
             contents.append({"role": "user", "parts": tool_results})
 
@@ -162,7 +200,6 @@ class GeminiAgentProvider:
         return ""
 
     def _execute_web_search(self, query: str) -> dict:
-        """Execute web_search tool via Tavily."""
         tavily = self._get_tavily_provider()
         result = tavily.search(query, max_results=3)
         return {
@@ -177,10 +214,8 @@ class GeminiAgentProvider:
 
 
 def default_provider() -> LLMProvider:
-    """Return the configured provider. Currently Gemini-only."""
     return GeminiProvider()
 
 
 def default_agent_provider() -> LLMAgentProvider:
-    """Return the configured agent provider (with function-calling)."""
     return GeminiAgentProvider()

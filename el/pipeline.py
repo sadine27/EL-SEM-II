@@ -74,7 +74,7 @@ def run() -> dict:
 
     filter_top_30.run(ctx)
 
-    if config.get("GEMINI_API_KEY"):
+    if config.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
         curate_picks.run(ctx)
         build_search_query.run(ctx)
         if ctx.get("cj_search_queries"):
@@ -107,7 +107,7 @@ def run() -> dict:
         else:
             log.warning("GOOGLE_SERVICE_ACCOUNT_JSON not set - skipping Write Curated Picks")
     else:
-        log.warning("GEMINI_API_KEY not set — skipping Dropship AI Agent")
+        log.warning("GOOGLE_SERVICE_ACCOUNT_JSON not set - skipping Dropship AI Agent (Vertex AI)")
 
     log.info("EL pipeline run end (ctx keys: %s)", list(ctx.keys()))
     return ctx

@@ -54,6 +54,7 @@ class GoogleDriveProvider:
             params={
                 "uploadType": "multipart",
                 "fields": "id,name,mimeType,parents,webViewLink",
+                "supportsAllDrives": "true",
             },
             data=body,
             timeout=self.timeout,

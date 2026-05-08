@@ -20,10 +20,19 @@ def run(ctx: dict, provider: google_sheets.SheetsProvider | None = None) -> dict
         }
         log.info("Create Curated Picks Tab: created %s", CURATED_PICKS_SHEET)
     except Exception as exc:
-        ctx["curated_picks_tab"] = {
-            "title": CURATED_PICKS_SHEET,
-            "created": False,
-            "error": str(exc),
-        }
-        log.warning("Create Curated Picks Tab failed; continuing: %s", exc)
+        body = getattr(getattr(exc, "response", None), "text", "") or ""
+        if "already exists" in body or "already exists" in str(exc):
+            ctx["curated_picks_tab"] = {
+                "title": CURATED_PICKS_SHEET,
+                "created": False,
+                "existed": True,
+            }
+            log.info("Create Curated Picks Tab: %s already exists, reusing", CURATED_PICKS_SHEET)
+        else:
+            ctx["curated_picks_tab"] = {
+                "title": CURATED_PICKS_SHEET,
+                "created": False,
+                "error": str(exc),
+            }
+            log.warning("Create Curated Picks Tab failed; continuing: %s", exc)
     return ctx

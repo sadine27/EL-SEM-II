@@ -30,6 +30,13 @@ def test_create_day_tab_calls_provider_and_stores_result():
 
 
 def test_create_day_tab_continue_on_fail_shape():
+    ctx = cdt.run({}, provider=FakeProvider(error=RuntimeError("boom")))
+    assert ctx["sheet_tab"]["created"] is False
+    assert ctx["sheet_tab"]["error"] == "boom"
+
+
+def test_create_day_tab_idempotent_when_tab_already_exists():
     ctx = cdt.run({}, provider=FakeProvider(error=RuntimeError("already exists")))
     assert ctx["sheet_tab"]["created"] is False
-    assert ctx["sheet_tab"]["error"] == "already exists"
+    assert ctx["sheet_tab"]["existed"] is True
+    assert "error" not in ctx["sheet_tab"]

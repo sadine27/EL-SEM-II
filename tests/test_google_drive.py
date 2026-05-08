@@ -58,6 +58,7 @@ def test_google_drive_provider_upload_file_request_shape():
     assert kwargs["params"] == {
         "uploadType": "multipart",
         "fields": "id,name,mimeType,parents,webViewLink",
+        "supportsAllDrives": "true",
     }
     assert kwargs["timeout"] == google_drive.DEFAULT_TIMEOUT
     assert b'"name":"x.json"' in kwargs["data"]

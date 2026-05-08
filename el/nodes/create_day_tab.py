@@ -21,6 +21,11 @@ def run(ctx: dict, provider: google_sheets.SheetsProvider | None = None) -> dict
         ctx["sheet_tab"] = {"title": title, "created": True, "response": response}
         log.info("Create Day Tab: created %s", title)
     except Exception as exc:
-        ctx["sheet_tab"] = {"title": title, "created": False, "error": str(exc)}
-        log.warning("Create Day Tab failed; continuing: %s", exc)
+        body = getattr(getattr(exc, "response", None), "text", "") or ""
+        if "already exists" in body or "already exists" in str(exc):
+            ctx["sheet_tab"] = {"title": title, "created": False, "existed": True}
+            log.info("Create Day Tab: %s already exists, reusing", title)
+        else:
+            ctx["sheet_tab"] = {"title": title, "created": False, "error": str(exc)}
+            log.warning("Create Day Tab failed; continuing: %s", exc)
     return ctx

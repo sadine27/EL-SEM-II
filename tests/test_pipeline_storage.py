@@ -64,6 +64,13 @@ def test_pipeline_runs_sheet_nodes_when_google_credentials_exist(monkeypatch):
         ctx["drive_upload_result"] = {"ok": True, "uploaded": True, "filename": "x.json"}
         return ctx
 
+    def fake_curate_picks(ctx: dict) -> dict:
+        ctx["curated_picks"] = []
+        return ctx
+
+    def fake_write_curated_picks(ctx: dict) -> dict:
+        return ctx
+
     monkeypatch.setattr(pipeline.score_rank, "run", fake_score_rank)
     monkeypatch.setattr(pipeline.create_day_tab, "run", fake_create_tab)
     monkeypatch.setattr(
@@ -73,6 +80,8 @@ def test_pipeline_runs_sheet_nodes_when_google_credentials_exist(monkeypatch):
     )
     monkeypatch.setattr(pipeline.drive_upload, "run", fake_drive_upload)
     monkeypatch.setattr(pipeline.write_rows_to_sheet, "run", fake_write_rows)
+    monkeypatch.setattr(pipeline.curate_picks, "run", fake_curate_picks)
+    monkeypatch.setattr(pipeline.write_curated_picks, "run", fake_write_curated_picks)
     ctx = pipeline.run()
     assert ctx["sheet_tab"]["created"] is True
     assert ctx["curated_picks_tab"]["created"] is True
@@ -84,7 +93,6 @@ def test_pipeline_runs_sheet_nodes_when_google_credentials_exist(monkeypatch):
 def test_pipeline_writes_curated_picks_when_google_and_gemini_exist(monkeypatch):
     monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
     monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_JSON", "{}")
-    monkeypatch.setenv("GEMINI_API_KEY", "key")
 
     def fake_score_rank(ctx: dict) -> dict:
         ctx["ranked_payload"] = _ranked_payload()

@@ -29,9 +29,18 @@ def test_create_curated_picks_tab_calls_provider_with_fixed_title():
 
 
 def test_create_curated_picks_tab_continue_on_fail_shape():
+    ctx = ccpt.run({}, provider=FakeProvider(error=RuntimeError("boom")))
+    assert ctx["curated_picks_tab"] == {
+        "title": "Curated Picks",
+        "created": False,
+        "error": "boom",
+    }
+
+
+def test_create_curated_picks_tab_idempotent_when_tab_already_exists():
     ctx = ccpt.run({}, provider=FakeProvider(error=RuntimeError("already exists")))
     assert ctx["curated_picks_tab"] == {
         "title": "Curated Picks",
         "created": False,
-        "error": "already exists",
+        "existed": True,
     }

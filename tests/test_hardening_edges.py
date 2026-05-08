@@ -129,15 +129,22 @@ def test_gemini_extract_handles_non_dict_items_and_results():
     }]
 
 
+def _stub_auth():
+    a = MagicMock(spec=llm.VertexAuth)
+    a.get_token.return_value = "tkn"
+    a.project_id = "p"
+    a.location = "global"
+    return a
+
+
 def test_default_gemini_extract_tolerates_malformed_candidate(monkeypatch):
     """Regression: malformed Gemini candidate crashed on candidates[0].get."""
     response = MagicMock(spec=requests.Response)
     response.raise_for_status.return_value = None
     response.json.return_value = {"candidates": ["bad"]}
-    monkeypatch.setenv("GEMINI_API_KEY", "KEY")
     monkeypatch.setattr(gemini_extract_product.requests, "post", lambda *_, **__: response)
 
-    result = gemini_extract_product._default_gemini_extract("prompt")
+    result = gemini_extract_product._default_gemini_extract("prompt", auth=_stub_auth())
 
     assert result["ok"] is True
     assert result["text"] == ""
@@ -148,11 +155,10 @@ def test_llm_providers_tolerate_malformed_candidate(monkeypatch):
     response = MagicMock(spec=requests.Response)
     response.raise_for_status.return_value = None
     response.json.return_value = {"candidates": ["bad"]}
-    monkeypatch.setenv("GEMINI_API_KEY", "KEY")
     monkeypatch.setattr(llm.requests, "post", lambda *_, **__: response)
 
-    assert llm.GeminiProvider().generate("system", "user") == ""
-    assert llm.GeminiAgentProvider().call_with_tools("system", "user", []) == ""
+    assert llm.GeminiProvider(auth=_stub_auth()).generate("system", "user") == ""
+    assert llm.GeminiAgentProvider(auth=_stub_auth()).call_with_tools("system", "user", []) == ""
 
 
 def test_normalize_browserbase_uses_first_balanced_json_object():
@@ -408,19 +414,18 @@ def test_requests_image_download_provider_success(monkeypatch):
 
 def test_gemini_default_extract_error_paths(monkeypatch):
     """Regression: Gemini HTTP/JSON errors must return ok=false."""
-    monkeypatch.setenv("GEMINI_API_KEY", "KEY")
 
     def request_error(*_, **__):
         raise requests.RequestException("down")
 
     monkeypatch.setattr(gemini_extract_product.requests, "post", request_error)
-    assert gemini_extract_product._default_gemini_extract("prompt")["ok"] is False
+    assert gemini_extract_product._default_gemini_extract("prompt", auth=_stub_auth())["ok"] is False
 
     response = MagicMock(spec=requests.Response)
     response.raise_for_status.return_value = None
     response.json.side_effect = ValueError("html")
     monkeypatch.setattr(gemini_extract_product.requests, "post", lambda *_, **__: response)
-    assert gemini_extract_product._default_gemini_extract("prompt")["ok"] is False
+    assert gemini_extract_product._default_gemini_extract("prompt", auth=_stub_auth())["ok"] is False
 
 
 def test_tavily_search_node_error_and_empty_result_paths():

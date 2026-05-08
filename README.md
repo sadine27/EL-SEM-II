@@ -23,18 +23,26 @@ All `el.config.require()` and `el.config.get()` keys are documented in
 Required for a full live run:
 
 - `YOUTUBE_API_KEY`
-- `GEMINI_API_KEY`
 - `TAVILY_API_KEY`
 - `CJ_EMAIL`
 - `CJ_API_KEY`
-- `GOOGLE_SERVICE_ACCOUNT_JSON`
+- `GOOGLE_SERVICE_ACCOUNT_JSON` — also authenticates Vertex AI (Gemini)
+- `VERTEX_LOCATION` — defaults to `global`; set a region for data residency
 - `SUPABASE_URL`
 - one of `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_SECRET_KEY`, or `SUPABASE_KEY`
+- `BROWSERBASE_API_KEY`
 - `TELEGRAM_HIL_BOT_TOKEN`
 - optional chat overrides: `TELEGRAM_HIL_CHAT_ID`, `TELEGRAM_ALERT_CHAT_ID`
 
-Legacy n8n sync variables (`N8N_URL`, `N8N_SECRET`, MCP entries) remain in
-`.env.example` for the archived workflow tooling.
+`GEMINI_API_KEY` is only used by `scripts/build_phase3_hil.py` for the in-browser
+Telegram WebApp. The pipeline itself calls Gemini through Vertex AI using the
+service account.
+
+Validate credentials end-to-end with:
+
+```powershell
+.venv\Scripts\python.exe scripts\verify_env.py
+```
 
 ## Run Tests
 
