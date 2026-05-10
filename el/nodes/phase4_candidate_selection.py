@@ -685,7 +685,14 @@ def _sort_key(candidate: PreparedCandidate) -> tuple[float, float, float]:
     return (-candidate.score, -(opportunity if opportunity is not None else -1), rank if rank is not None else 999)
 
 
-def select_candidates(rows: list[dict], *, selected_at: str | None = None) -> list[dict]:
+def _select_internal(
+    rows: list[dict], *, selected_at: str | None = None
+) -> tuple[list[dict], list[PreparedCandidate]]:
+    """Internal: return (selected_rows, deduped_candidates).
+
+    deduped_candidates is the post-mismatch/dedupe pool BEFORE caps.
+    selected_rows is the same list select_candidates returned historically.
+    """
     now_value = selected_at or _now_iso()
     prepared = [prepare_candidate(row) for row in rows]
     eligible = sorted(
@@ -803,12 +810,50 @@ def select_candidates(rows: list[dict], *, selected_at: str | None = None) -> li
             "dedupe_name_key": candidate.normalized_name or None,
         }
         output.append(attach_payload(candidate, selection))
-    return output
+    return output, deduped
+
+
+def select_candidates(rows: list[dict], *, selected_at: str | None = None) -> list[dict]:
+    """Public: return the selected candidates list, exactly as before."""
+    selected, _pool = _select_internal(rows, selected_at=selected_at)
+    return selected
+
+
+def build_eligible_pool(
+    deduped: list[PreparedCandidate], selected_rows: list[dict]
+) -> list[dict]:
+    """Serialize the pre-cap deduped pool for ctx["eligible_pool"].
+
+    Each entry: {candidate_payload, candidate_score, candidate_rank, in_greedy_slate}.
+    candidate_rank is 1-based, in deduped order (sorted desc by selection_score).
+    in_greedy_slate is True iff the candidate's row appears in selected_rows.
+    """
+    selected_keys = {
+        (compact(r.get("product_url")).lower(), compact(r.get("product_sku")).lower())
+        for r in selected_rows
+    }
+    pool: list[dict] = []
+    for idx, candidate in enumerate(deduped, start=1):
+        key = (
+            compact(candidate.row.get("product_url")).lower(),
+            compact(candidate.row.get("product_sku")).lower(),
+        )
+        pool.append({
+            "candidate_payload": dict(candidate.row),
+            "candidate_score": float(candidate.score),
+            "candidate_rank": idx,
+            "in_greedy_slate": key in selected_keys,
+        })
+    return pool
 
 
 def run(ctx: dict, *, selected_at: str | None = None) -> dict:
     rows = [item for item in (ctx.get("review_candidates") or []) if isinstance(item, dict)]
-    selected = select_candidates(rows, selected_at=selected_at)
+    selected, deduped = _select_internal(rows, selected_at=selected_at)
     ctx["phase4_candidates"] = selected
-    log.info("Phase 4 Candidate Selection: selected %d of %d candidates", len(selected), len(rows))
+    ctx["eligible_pool"] = build_eligible_pool(deduped, selected)
+    log.info(
+        "Phase 4 Candidate Selection: selected %d of %d candidates (eligible pool %d)",
+        len(selected), len(rows), len(ctx["eligible_pool"]),
+    )
     return ctx
