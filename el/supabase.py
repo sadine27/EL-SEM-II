@@ -10,6 +10,7 @@ from el import config
 HIL_REVIEWS_TABLE = "hil_reviews"
 HIL_REVIEW_EVENTS_TABLE = "hil_review_events"
 HIL_REVIEWS_SCHEMA = "private"
+HIL_LOGGING_EVENTS_TABLE = "hil_logging_events"
 HIL_REVIEWS_CONFLICT_COLUMNS = (
     "workflow_run_id",
     "source_provider",
