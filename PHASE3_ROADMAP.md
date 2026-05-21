@@ -11,11 +11,11 @@ This is a **meta-document**. It does not design or specify any sub-project. Each
 
 ## Status snapshot
 
-_Last updated: 2026-05-21 (post Step 0)._
+_Last updated: 2026-05-21 (SP1 implementation complete, pre-merge)._
 
 | SP | Title | Status | Notes |
 |---|---|---|---|
-| SP1 | Telemetry Foundation | 🟡 in progress (~40%) | 4 of 10 plan tasks committed on `feat/sp1-telemetry-foundation`. |
+| SP1 | Telemetry Foundation | 🟢 code complete, pre-merge | All 10 plan tasks committed on `feat/sp1-telemetry-foundation`. 433/433 tests green, 92% overall coverage. Iteration log at `docs/SP1_LOG.md`. Awaiting merge to `main`. |
 | SP2 | Source Expansion | ⬜ not started | Design pending. |
 | SP3 | Vision + pgvector | ⬜ not started | Design pending. |
 | SP4 | FastAPI + RAG chat bot | ⬜ not started | Design pending. Depends on SP3. |
@@ -24,7 +24,7 @@ _Last updated: 2026-05-21 (post Step 0)._
 | SP8 | Docker + Hetzner deploy | ⬜ not started | Design pending. Depends on all user-facing SPs. |
 | SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events. Sequenced last. |
 
-**Next action:** Resume SP1 Task 4 — implement `stochastic_logger.run()` with Supabase integration (TDD: write run() tests first, then implement). See `docs/superpowers/plans/2026-05-10-sp1-telemetry-foundation.md` §Task 4.
+**Next action:** Merge SP1 to `main` (squash-merge per the branch/PR strategy), then start SP2 brainstorming. Production smoke (run one batch against the live Supabase, verify `hil_logging_events` rows + `logging_event_id` stamping on `hil_reviews`) must be done by a human with credentials after merge.
 
 **Step 0 status:** ✅ complete (2026-05-21). Paper work parked on `paper/phase2-revision` at commit `de79243`. `EL report content.docx` deleted (was an old Word version of the paper).
 
@@ -53,13 +53,14 @@ Sequencing follows the master spec's dependencies, with two intentional deviatio
 SP1 ─► SP2 ─► SP3 ─► SP4 ─► SP5 ─► SP6 ─► SP8 ─► SP7
 ```
 
-### SP1 — Telemetry Foundation 🟡
+### SP1 — Telemetry Foundation 🟢
 
-- **Branch:** `feat/sp1-telemetry-foundation` (existing)
+- **Branch:** `feat/sp1-telemetry-foundation` (ready to merge)
 - **Design:** `docs/superpowers/specs/2026-05-10-sp1-telemetry-foundation-design.md` ✅
 - **Plan:** `docs/superpowers/plans/2026-05-10-sp1-telemetry-foundation.md` ✅
-- **Remaining tasks:** Task 4 (`stochastic_logger.run()` + Supabase), Task 5 (rewire `supabase_insert_hil_reviews`), Task 6 (pipeline wire-in), Task 7 (E2E integration test), Task 8 (ε=0 regression), Task 9 (iteration log).
-- **Estimated remaining:** 2–3 days.
+- **Iteration log:** `docs/SP1_LOG.md` ✅
+- **All 10 tasks committed.** 433/433 tests green, 92% overall coverage.
+- **Pending:** squash-merge to `main`; post-merge production smoke run.
 
 ### SP2 — Source Expansion ⬜
 
