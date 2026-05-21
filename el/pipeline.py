@@ -29,6 +29,7 @@ from el.nodes import (
     score_rank,
     send_hil_telegram_photo,
     send_hil_telegram_text_fallback,
+    stochastic_logger,
     supabase_insert_hil_reviews,
     write_curated_picks,
     write_rows_to_sheet,
@@ -85,6 +86,7 @@ def run() -> dict:
                 normalize_cj_review.run(ctx)
                 merge_review_sources.run(ctx)
                 phase4_candidate_selection.run(ctx)
+                stochastic_logger.run(ctx)
                 if config.get("SUPABASE_URL") and (
                     config.get("SUPABASE_SERVICE_ROLE_KEY")
                     or config.get("SUPABASE_SECRET_KEY")
