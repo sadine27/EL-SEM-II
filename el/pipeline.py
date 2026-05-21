@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from el import config
 from el.logger import get_logger
+from el.sources import TrendCandidate
+from el.sources import shopify_competitor as shopify_competitor_source
+from el.sources import youtube as youtube_source
 from el.nodes import (
     answer_hil_callback,
     apply_hil_callback,
@@ -39,14 +42,62 @@ from el.nodes import (
 log = get_logger(__name__)
 
 
+_SOURCE_REGISTRY = {
+    "youtube": youtube_source,
+    "shopify_competitor": shopify_competitor_source,
+}
+
+
+def _load_enabled_sources():
+    """Return source modules listed in EL_SOURCES_ENABLED, in given order.
+
+    Unknown names are logged and skipped. Empty/unset env var → ["youtube"].
+    """
+    raw = config.get("EL_SOURCES_ENABLED")
+    names = [n.strip() for n in (raw or "").split(",") if n.strip()]
+    if not names:
+        names = ["youtube"]
+    out = []
+    for name in names:
+        mod = _SOURCE_REGISTRY.get(name)
+        if mod is None:
+            log.warning("EL_SOURCES_ENABLED: unknown source %r — skipping", name)
+            continue
+        out.append(mod)
+    return out
+
+
+def _fetch_all_sources(sources, ctx: dict) -> list[TrendCandidate]:
+    """Call fetch_trends on each source, isolating per-source failures."""
+    aggregated: list[TrendCandidate] = []
+    for src in sources:
+        try:
+            aggregated.extend(src.fetch_trends(ctx))
+        except Exception:
+            log.exception("source %s: fetch_trends crashed", getattr(src, "SOURCE_ID", "?"))
+    return aggregated
+
+
 def run() -> dict:
     """Execute the daily batch. Nodes are wired in order from EL.json."""
     log.info("EL pipeline run start")
     ctx: dict = {}
 
-    if config.get("YOUTUBE_API_KEY"):
+    # SP2: load enabled sources into ctx["source_candidates"]. This is additive —
+    # no downstream node consumes source_candidates yet; score_rank still reads
+    # ctx["youtube_items"] populated by the YouTube source via youtube_trending.
+    enabled_sources = _load_enabled_sources()
+    ctx["source_candidates"] = _fetch_all_sources(enabled_sources, ctx)
+    log.info("EL pipeline: loaded %d candidate(s) from %d source(s)",
+             len(ctx["source_candidates"]), len(enabled_sources))
+
+    if config.get("YOUTUBE_API_KEY") and not any(
+        s.SOURCE_ID == "youtube" for s in enabled_sources
+    ):
+        # YouTube was not in EL_SOURCES_ENABLED — fall back to direct call so
+        # score_rank still gets ctx["youtube_items"].
         youtube_trending.run(ctx)
-    else:
+    elif not config.get("YOUTUBE_API_KEY"):
         log.warning("YOUTUBE_API_KEY not set — skipping YouTube Trending IN")
 
     score_rank.run(ctx)
