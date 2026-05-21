@@ -11,7 +11,7 @@ This is a **meta-document**. It does not design or specify any sub-project. Each
 
 ## Status snapshot
 
-_Last updated: 2026-05-21._
+_Last updated: 2026-05-21 (post Step 0)._
 
 | SP | Title | Status | Notes |
 |---|---|---|---|
@@ -24,7 +24,9 @@ _Last updated: 2026-05-21._
 | SP8 | Docker + Hetzner deploy | ⬜ not started | Design pending. Depends on all user-facing SPs. |
 | SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events. Sequenced last. |
 
-**Next action:** Step 0 — stash uncommitted paper work into `paper/phase2-revision`, then resume SP1 Task 4 (`stochastic_logger.run()`).
+**Next action:** Resume SP1 Task 4 — implement `stochastic_logger.run()` with Supabase integration (TDD: write run() tests first, then implement). See `docs/superpowers/plans/2026-05-10-sp1-telemetry-foundation.md` §Task 4.
+
+**Step 0 status:** ✅ complete (2026-05-21). Paper work parked on `paper/phase2-revision` at commit `de79243`. `EL report content.docx` deleted (was an old Word version of the paper).
 
 ---
 
