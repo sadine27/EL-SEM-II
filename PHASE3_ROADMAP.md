@@ -11,12 +11,12 @@ This is a **meta-document**. It does not design or specify any sub-project. Each
 
 ## Status snapshot
 
-_Last updated: 2026-05-21 (SP2 code-complete, pre-merge)._
+_Last updated: 2026-05-21 (SP2 merged to main)._
 
 | SP | Title | Status | Notes |
 |---|---|---|---|
 | SP1 | Telemetry Foundation | ✅ merged to main | All 10 plan tasks merged via fast-forward (see Roadmap revisions §1). 433/433 tests green, 92% overall coverage. Iteration log at `docs/SP1_LOG.md`. **Pending:** human-driven production smoke run (see SP1_LOG runbook §4). |
-| SP2 | Source Expansion | 🟢 code complete, pre-merge | All 5 plan tasks committed on `feat/sp2-source-expansion`. Scoped to 2 sources (YouTube refactor + Shopify competitor); 4 sources deferred (see SP2 design spec §1). 463/463 tests green. Iteration log at `docs/SP2_LOG.md`. |
+| SP2 | Source Expansion | ✅ merged to main | Squash-merged at `cbb6b9a`. Scoped to 2 sources (YouTube refactor + Shopify competitor); 4 sources deferred per SP2 design spec §1. 463/463 tests green. Iteration log at `docs/SP2_LOG.md`. **Pending:** optional production smoke if Shopify-competitor is enabled. |
 | SP3 | Vision + pgvector | ⬜ not started | Design pending. |
 | SP4 | FastAPI + RAG chat bot | ⬜ not started | Design pending. Depends on SP3. |
 | SP5 | Outbound (email, Shopify auto-store, notify) | ⬜ not started | Design pending. |
@@ -24,7 +24,7 @@ _Last updated: 2026-05-21 (SP2 code-complete, pre-merge)._
 | SP8 | Docker + Hetzner deploy | ⬜ not started | Design pending. Depends on all user-facing SPs. |
 | SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events. Sequenced last. |
 
-**Next action:** Squash-merge SP2 to `main`, then start SP3 (Vision + pgvector) brainstorming. Pending human-side: SP1 production smoke per `docs/SP1_LOG.md` §Deploy runbook step 4 (Supabase access required); SP2 production smoke per `docs/SP2_LOG.md` §Deploy runbook step 4 (optional — only if enabling Shopify-competitor).
+**Next action:** Start SP3 (Vision + pgvector) brainstorming session. Pending human-side: SP1 production smoke per `docs/SP1_LOG.md` §Deploy runbook step 4 (Supabase access required); SP2 production smoke per `docs/SP2_LOG.md` §Deploy runbook step 4 (optional — only if enabling Shopify-competitor).
 
 **Step 0 status:** ✅ complete (2026-05-21). Paper work parked on `paper/phase2-revision` at commit `de79243`. `EL report content.docx` deleted (was an old Word version of the paper).
 
@@ -62,15 +62,14 @@ SP1 ─► SP2 ─► SP3 ─► SP4 ─► SP5 ─► SP6 ─► SP8 ─► SP7
 - **All 10 tasks committed.** 433/433 tests green, 92% overall coverage.
 - **Pending:** squash-merge to `main`; post-merge production smoke run.
 
-### SP2 — Source Expansion 🟢
+### SP2 — Source Expansion ✅
 
-- **Branch:** `feat/sp2-source-expansion` (ready to merge)
+- **Merged:** `cbb6b9a` (squash) on 2026-05-21.
 - **Design:** `docs/superpowers/specs/2026-05-21-sp2-source-expansion-design.md` ✅
 - **Plan:** `docs/superpowers/plans/2026-05-21-sp2-source-expansion.md` ✅
 - **Iteration log:** `docs/SP2_LOG.md` ✅
 - **Shipped:** `Source` protocol, YouTube source, Shopify-competitor source, pipeline source-loop.
-- **Deferred** to future sub-projects: Google Trends via pytrends, Meta Ad Library, TikTok Creative Center, AliExpress trending (see SP2 design spec §1 for reasoning).
-- **Pending:** squash-merge to `main`; optional production smoke if Shopify-competitor is enabled.
+- **Deferred** to future sub-projects: Google Trends via pytrends, Meta Ad Library, TikTok Creative Center, AliExpress trending (see SP2 design spec §1).
 
 ### SP3 — Vision + pgvector ⬜
 
