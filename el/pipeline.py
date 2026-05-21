@@ -16,6 +16,7 @@ from el.nodes import (
     create_day_tab,
     curate_picks,
     download_product_image,
+    embed_candidate_products,
     drive_upload,
     filter_top_30,
     if_callback_finalized_review,
@@ -134,6 +135,8 @@ def run() -> dict:
                 cj_get_token.run(ctx)
                 cj_product_list.run(ctx)
                 pick_top_3.run(ctx)
+                if config.get("EL_EMBEDDINGS_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}:
+                    embed_candidate_products.run(ctx)
                 normalize_cj_review.run(ctx)
                 merge_review_sources.run(ctx)
                 phase4_candidate_selection.run(ctx)
