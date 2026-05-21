@@ -11,11 +11,11 @@ This is a **meta-document**. It does not design or specify any sub-project. Each
 
 ## Status snapshot
 
-_Last updated: 2026-05-21 (SP1 implementation complete, pre-merge)._
+_Last updated: 2026-05-21 (SP1 merged to main)._
 
 | SP | Title | Status | Notes |
 |---|---|---|---|
-| SP1 | Telemetry Foundation | 🟢 code complete, pre-merge | All 10 plan tasks committed on `feat/sp1-telemetry-foundation`. 433/433 tests green, 92% overall coverage. Iteration log at `docs/SP1_LOG.md`. Awaiting merge to `main`. |
+| SP1 | Telemetry Foundation | ✅ merged to main | All 10 plan tasks merged via fast-forward (see Roadmap revisions §1). 433/433 tests green, 92% overall coverage. Iteration log at `docs/SP1_LOG.md`. **Pending:** human-driven production smoke run (see SP1_LOG runbook §4). |
 | SP2 | Source Expansion | ⬜ not started | Design pending. |
 | SP3 | Vision + pgvector | ⬜ not started | Design pending. |
 | SP4 | FastAPI + RAG chat bot | ⬜ not started | Design pending. Depends on SP3. |
@@ -24,7 +24,7 @@ _Last updated: 2026-05-21 (SP1 implementation complete, pre-merge)._
 | SP8 | Docker + Hetzner deploy | ⬜ not started | Design pending. Depends on all user-facing SPs. |
 | SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events. Sequenced last. |
 
-**Next action:** Merge SP1 to `main` (squash-merge per the branch/PR strategy), then start SP2 brainstorming. Production smoke (run one batch against the live Supabase, verify `hil_logging_events` rows + `logging_event_id` stamping on `hil_reviews`) must be done by a human with credentials after merge.
+**Next action:** Start SP2 (Source Expansion) brainstorming session. In parallel, when convenient: run the SP1 production smoke per `docs/SP1_LOG.md` §Deploy runbook step 4 (Supabase access required).
 
 **Step 0 status:** ✅ complete (2026-05-21). Paper work parked on `paper/phase2-revision` at commit `de79243`. `EL report content.docx` deleted (was an old Word version of the paper).
 
@@ -169,4 +169,10 @@ A sub-project is "done" only when **all** of the following are true:
 
 ## Roadmap revisions
 
-_None yet._
+### §1 — 2026-05-21 — SP1 merged as fast-forward, not squash
+
+**Deviation:** Roadmap §Branch & PR strategy specifies squash-merge for SP PRs. SP1 was merged with `git merge --ff-only` instead, preserving 13 granular commits on `main`.
+
+**Reason:** The `feat/sp1-telemetry-foundation` branch contained three distinct units of work — the SP1 implementation, the Phase 3 roadmap meta-document, and Step 0 branch hygiene. Squashing would have produced a single commit message conflating all three. Fast-forward preserves per-task TDD commit history with no information loss and is reversible via `git reset` if needed.
+
+**Future SPs:** Will follow the squash-merge default. SP1's mixed-purpose branch was a one-off artifact of Phase 3 kickoff.
