@@ -214,3 +214,48 @@ def test_select_candidates_applies_provider_and_total_caps():
 
     assert len(selected_cj) == phase4_candidate_selection.CJ_PROVIDER_CAP
     assert len(selected) == phase4_candidate_selection.TOTAL_CAP
+
+
+def test_run_emits_eligible_pool_alongside_phase4_candidates():
+    """Phase4 run() must populate ctx["eligible_pool"] with the deduped, pre-cap pool.
+
+    Each entry has the shape required by stochastic_logger:
+    candidate_payload, candidate_score, candidate_rank, in_greedy_slate.
+    """
+    ctx = {"review_candidates": [_candidate(), _candidate(product_url="https://app.cjdropshipping.com/product/PID2.html", product_sku="SKU2")]}
+    phase4_candidate_selection.run(ctx, selected_at="2026-05-07T12:00:00Z")
+
+    assert "eligible_pool" in ctx
+    pool = ctx["eligible_pool"]
+    assert isinstance(pool, list)
+    assert len(pool) >= 1
+    for idx, entry in enumerate(pool):
+        assert set(entry.keys()) == {
+            "candidate_payload",
+            "candidate_score",
+            "candidate_rank",
+            "in_greedy_slate",
+        }
+        assert isinstance(entry["candidate_payload"], dict)
+        assert isinstance(entry["candidate_score"], float)
+        assert entry["candidate_rank"] == idx + 1
+        assert isinstance(entry["in_greedy_slate"], bool)
+
+
+def test_eligible_pool_marks_selected_candidates_as_in_greedy_slate():
+    """Items that ended up in phase4_candidates must have in_greedy_slate=True;
+    items that were deduped-in but cap-rejected must have in_greedy_slate=False."""
+    rows = [_candidate() for _ in range(15)]
+    for i, row in enumerate(rows):
+        row["product_url"] = f"https://app.cjdropshipping.com/product/PID{i}.html"
+        row["product_sku"] = f"SKU{i}"
+        row["product_name"] = f"Wireless Earbuds Pro {i}"
+    ctx = {"review_candidates": rows}
+    phase4_candidate_selection.run(ctx, selected_at="2026-05-07T12:00:00Z")
+
+    selected = ctx["phase4_candidates"]
+    pool = ctx["eligible_pool"]
+
+    selected_count = sum(1 for e in pool if e["in_greedy_slate"])
+    assert selected_count == len(selected)
+    assert len(pool) >= len(selected)

@@ -10,6 +10,12 @@ from el import config
 HIL_REVIEWS_TABLE = "hil_reviews"
 HIL_REVIEW_EVENTS_TABLE = "hil_review_events"
 HIL_REVIEWS_SCHEMA = "private"
+HIL_LOGGING_EVENTS_TABLE = "hil_logging_events"
+PRODUCT_EMBEDDINGS_TABLE = "product_embeddings"
+PRODUCT_EMBEDDINGS_CONFLICT_COLUMNS = ("product_key",)
+MATCH_PRODUCT_EMBEDDINGS_FN = "match_product_embeddings"
+RUN_REQUESTS_TABLE = "run_requests"
+RUN_REQUESTS_SCHEMA = "private"
 HIL_REVIEWS_CONFLICT_COLUMNS = (
     "workflow_run_id",
     "source_provider",
@@ -140,6 +146,36 @@ class SupabaseRestProvider:
         resp.raise_for_status()
         data = resp.json()
         return data if isinstance(data, list) else [data]
+
+    def call_rpc(
+        self,
+        *,
+        schema: str,
+        function: str,
+        params: dict,
+    ) -> list[dict]:
+        """Invoke a Postgres function via PostgREST's /rpc/ endpoint."""
+        endpoint = urljoin(self.url, f"rest/v1/rpc/{function}")
+        resp = requests.post(
+            endpoint,
+            headers={
+                "apikey": self.key,
+                "Authorization": f"Bearer {self.key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Accept-Profile": schema,
+                "Content-Profile": schema,
+            },
+            json=params,
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, list):
+            return data
+        if data is None:
+            return []
+        return [data]
 
     def update_rows(
         self,

@@ -27,7 +27,16 @@ def prepare_row(row: dict) -> dict:
 
 
 def run(ctx: dict, provider: supabase.SupabaseRestProvider | None = None) -> dict:
-    rows = [prepare_row(row) for row in (ctx.get("phase4_candidates") or []) if isinstance(row, dict)]
+    source = ctx.get("hil_slate")
+    if source is None:
+        source = ctx.get("phase4_candidates") or []
+    rows = [prepare_row(row) for row in source if isinstance(row, dict)]
+
+    logging_event_id = ctx.get("logging_event_id") or ""
+    if logging_event_id:
+        for row in rows:
+            row["logging_event_id"] = logging_event_id
+
     if not rows:
         ctx["hil_reviews_upsert_result"] = {"ok": True, "rows": 0, "data": []}
         log.info("Supabase Insert (HIL Reviews): no rows to upsert")

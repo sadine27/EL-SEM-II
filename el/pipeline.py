@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from el import config
 from el.logger import get_logger
+from el.sources import TrendCandidate
+from el.sources import shopify_competitor as shopify_competitor_source
+from el.sources import youtube as youtube_source
 from el.nodes import (
     answer_hil_callback,
     apply_hil_callback,
@@ -13,6 +16,9 @@ from el.nodes import (
     create_day_tab,
     curate_picks,
     download_product_image,
+    email_digest,
+    email_product_detail,
+    embed_candidate_products,
     drive_upload,
     filter_top_30,
     if_callback_finalized_review,
@@ -20,6 +26,7 @@ from el.nodes import (
     mark_telegram_text_fallback,
     merge_review_sources,
     normalize_cj_review,
+    notify_business,
     parse_hil_callback,
     phase4_candidate_selection,
     pick_top_3,
@@ -29,7 +36,9 @@ from el.nodes import (
     score_rank,
     send_hil_telegram_photo,
     send_hil_telegram_text_fallback,
+    stochastic_logger,
     supabase_insert_hil_reviews,
+    telegram_alert,
     write_curated_picks,
     write_rows_to_sheet,
     youtube_trending,
@@ -38,14 +47,67 @@ from el.nodes import (
 log = get_logger(__name__)
 
 
-def run() -> dict:
-    """Execute the daily batch. Nodes are wired in order from EL.json."""
-    log.info("EL pipeline run start")
-    ctx: dict = {}
+_SOURCE_REGISTRY = {
+    "youtube": youtube_source,
+    "shopify_competitor": shopify_competitor_source,
+}
 
-    if config.get("YOUTUBE_API_KEY"):
+
+def _load_enabled_sources():
+    """Return source modules listed in EL_SOURCES_ENABLED, in given order.
+
+    Unknown names are logged and skipped. Empty/unset env var → ["youtube"].
+    """
+    raw = config.get("EL_SOURCES_ENABLED")
+    names = [n.strip() for n in (raw or "").split(",") if n.strip()]
+    if not names:
+        names = ["youtube"]
+    out = []
+    for name in names:
+        mod = _SOURCE_REGISTRY.get(name)
+        if mod is None:
+            log.warning("EL_SOURCES_ENABLED: unknown source %r — skipping", name)
+            continue
+        out.append(mod)
+    return out
+
+
+def _fetch_all_sources(sources, ctx: dict) -> list[TrendCandidate]:
+    """Call fetch_trends on each source, isolating per-source failures."""
+    aggregated: list[TrendCandidate] = []
+    for src in sources:
+        try:
+            aggregated.extend(src.fetch_trends(ctx))
+        except Exception:
+            log.exception("source %s: fetch_trends crashed", getattr(src, "SOURCE_ID", "?"))
+    return aggregated
+
+
+def run(initial_ctx: dict | None = None) -> dict:
+    """Execute the daily batch. Nodes are wired in order from EL.json.
+
+    ``initial_ctx`` (SP4): optional seed values placed into the ctx before any
+    node runs. Used by ``run_for_request`` to inject user-supplied niche /
+    dislikes / budget. Existing callers pass nothing and behavior is unchanged.
+    """
+    log.info("EL pipeline run start")
+    ctx: dict = dict(initial_ctx) if initial_ctx else {}
+
+    # SP2: load enabled sources into ctx["source_candidates"]. This is additive —
+    # no downstream node consumes source_candidates yet; score_rank still reads
+    # ctx["youtube_items"] populated by the YouTube source via youtube_trending.
+    enabled_sources = _load_enabled_sources()
+    ctx["source_candidates"] = _fetch_all_sources(enabled_sources, ctx)
+    log.info("EL pipeline: loaded %d candidate(s) from %d source(s)",
+             len(ctx["source_candidates"]), len(enabled_sources))
+
+    if config.get("YOUTUBE_API_KEY") and not any(
+        s.SOURCE_ID == "youtube" for s in enabled_sources
+    ):
+        # YouTube was not in EL_SOURCES_ENABLED — fall back to direct call so
+        # score_rank still gets ctx["youtube_items"].
         youtube_trending.run(ctx)
-    else:
+    elif not config.get("YOUTUBE_API_KEY"):
         log.warning("YOUTUBE_API_KEY not set — skipping YouTube Trending IN")
 
     score_rank.run(ctx)
@@ -82,9 +144,12 @@ def run() -> dict:
                 cj_get_token.run(ctx)
                 cj_product_list.run(ctx)
                 pick_top_3.run(ctx)
+                if config.get("EL_EMBEDDINGS_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}:
+                    embed_candidate_products.run(ctx)
                 normalize_cj_review.run(ctx)
                 merge_review_sources.run(ctx)
                 phase4_candidate_selection.run(ctx)
+                stochastic_logger.run(ctx)
                 if config.get("SUPABASE_URL") and (
                     config.get("SUPABASE_SERVICE_ROLE_KEY")
                     or config.get("SUPABASE_SECRET_KEY")
@@ -109,5 +174,56 @@ def run() -> dict:
     else:
         log.warning("GOOGLE_SERVICE_ACCOUNT_JSON not set - skipping Dropship AI Agent (Vertex AI)")
 
+    # SP5a: end-of-run outbound (gated by Gmail SMTP creds).
+    if config.get("GMAIL_SMTP_USER") and config.get("GMAIL_SMTP_APP_PASSWORD"):
+        email_digest.run(ctx)
+        email_product_detail.run(ctx)
+    else:
+        log.warning("GMAIL_SMTP_* not set - skipping outbound email nodes")
+
+    # SP5a: business notification + dev alert (both safe with TELEGRAM bot token).
+    if config.get("TELEGRAM_HIL_BOT_TOKEN"):
+        notify_business.run(ctx)
+        if ctx.get("formatted_error"):
+            telegram_alert.run(ctx)
+    elif ctx.get("formatted_error"):
+        log.warning("TELEGRAM_HIL_BOT_TOKEN not set - skipping notify_business + telegram_alert")
+
     log.info("EL pipeline run end (ctx keys: %s)", list(ctx.keys()))
     return ctx
+
+
+def run_for_request(request_id: str, *, db_provider=None) -> str:
+    """SP4: run the pipeline for a user-submitted request row.
+
+    Reads the row from ``private.run_requests``, marks it ``running``, seeds
+    ctx with the user-supplied niche/dislikes/budget, calls ``run()``, and
+    marks the row ``done`` or ``error``. Returns the final status.
+    """
+    from el.supabase import SupabaseRestProvider
+    from el.web import run_service
+
+    db = db_provider or SupabaseRestProvider()
+    row = run_service.get_run(request_id=request_id, db_provider=db)
+    if row is None:
+        raise ValueError(f"run_request {request_id} not found")
+
+    run_service.mark_running(
+        request_id=request_id, pipeline_run_id=None, db_provider=db,
+    )
+    try:
+        initial_ctx = {
+            "niche": row.get("niche"),
+            "dislikes": row.get("dislikes"),
+            "budget_usd": row.get("budget_usd"),
+            "run_request_id": request_id,
+        }
+        run(initial_ctx=initial_ctx)
+    except Exception as exc:
+        run_service.mark_error(
+            request_id=request_id, error_message=str(exc), db_provider=db,
+        )
+        return "error"
+
+    run_service.mark_done(request_id=request_id, db_provider=db)
+    return "done"

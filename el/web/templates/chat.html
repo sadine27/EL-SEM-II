@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Chat — EL{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">Chat over your catalog</h1>
+<p class="text-slate-600 mb-6">Asks Gemini grounded over your SP3 product embeddings.</p>
+
+<form id="chat-form" class="space-y-4 bg-white rounded-lg border p-6 shadow-sm">
+  <div>
+    <label for="question" class="block text-sm font-medium mb-1">Question</label>
+    <textarea id="question" name="question" rows="3" required
+              placeholder="e.g. which earbuds work well in the gym?"
+              class="w-full border rounded px-3 py-2"></textarea>
+  </div>
+  <button type="submit"
+          class="bg-slate-900 text-white rounded px-4 py-2 hover:bg-slate-700">
+    Ask
+  </button>
+</form>
+
+<section class="mt-6 space-y-4">
+  <div id="chat-context" class="text-sm text-slate-600"></div>
+  <article id="chat-answer"
+           class="bg-white rounded-lg border p-6 shadow-sm whitespace-pre-wrap leading-relaxed"></article>
+</section>
+
+<script>
+  (function () {
+    var form = document.getElementById("chat-form");
+    var contextEl = document.getElementById("chat-context");
+    var answerEl = document.getElementById("chat-answer");
+
+    function renderContext(products) {
+      while (contextEl.firstChild) contextEl.removeChild(contextEl.firstChild);
+      if (!products || !products.length) return;
+      var label = document.createElement("strong");
+      label.textContent = "Context: ";
+      contextEl.appendChild(label);
+      products.forEach(function (p, idx) {
+        var a = document.createElement("a");
+        a.className = "underline";
+        a.href = p.product_url || "#";
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.textContent = p.product_name || "";
+        contextEl.appendChild(a);
+        if (idx < products.length - 1) contextEl.appendChild(document.createTextNode(", "));
+      });
+    }
+
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var q = document.getElementById("question").value.trim();
+      if (!q) return;
+      renderContext([]);
+      answerEl.textContent = "";
+
+      var token = (typeof window.elBearer === "function") ? window.elBearer() : "";
+      var resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + token,
+          "Accept": "text/event-stream",
+        },
+        body: JSON.stringify({ question: q }),
+      });
+      if (!resp.ok) {
+        answerEl.textContent = "Error: " + resp.status;
+        return;
+      }
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = "";
+      while (true) {
+        var chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        var parts = buffer.split("\n\n");
+        buffer = parts.pop();
+        for (var i = 0; i < parts.length; i++) {
+          var line = parts[i];
+          if (!line.startsWith("data: ")) continue;
+          try {
+            var payload = JSON.parse(line.slice(6));
+            if (payload.event === "context") {
+              renderContext(payload.products || []);
+            } else if (payload.event === "chunk") {
+              answerEl.textContent += payload.text || "";
+            } else if (payload.event === "done") {
+              return;
+            } else if (payload.event === "error") {
+              answerEl.textContent += "\n\n[error: " + (payload.message || "") + "]";
+              return;
+            }
+          } catch (_) { /* skip malformed line */ }
+        }
+      }
+    });
+  })();
+</script>
+{% endblock %}

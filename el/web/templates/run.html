@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Run {{ request_id }} — EL{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-semibold mb-2">Run status</h1>
+<p class="text-slate-600 mb-4 font-mono text-sm">{{ request_id }}</p>
+
+<div id="run-status"
+     hx-get="/api/runs/{{ request_id }}"
+     hx-trigger="load, every 3s"
+     hx-swap="innerHTML"
+     class="bg-white rounded-lg border p-6 shadow-sm font-mono text-sm">
+  Loading…
+</div>
+
+<p class="mt-4 text-sm text-slate-500">
+  Polling every 3s. Status transitions: queued → running → done | error.
+</p>
+{% endblock %}

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}EL{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <link rel="stylesheet" href="/static/app.css" />
+  <script>
+    // Single-operator MVP: bearer token cached in sessionStorage; prompted once per session.
+    (function () {
+      function getToken() {
+        var t = sessionStorage.getItem("el_bearer");
+        if (!t) {
+          t = window.prompt("Enter operator bearer token:") || "";
+          if (t) sessionStorage.setItem("el_bearer", t);
+        }
+        return t;
+      }
+      document.body && document.body.addEventListener("htmx:configRequest", function (e) {
+        e.detail.headers["Authorization"] = "Bearer " + getToken();
+      });
+      document.addEventListener("DOMContentLoaded", function () {
+        document.body.addEventListener("htmx:configRequest", function (e) {
+          e.detail.headers["Authorization"] = "Bearer " + getToken();
+        });
+        window.elBearer = getToken;
+      });
+    })();
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <header class="border-b bg-white">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center gap-4">
+      <a href="/" class="font-semibold">EL</a>
+      <nav class="flex gap-4 text-sm text-slate-600">
+        <a href="/" class="hover:text-slate-900">Submit run</a>
+        <a href="/chat" class="hover:text-slate-900">Chat</a>
+      </nav>
+    </div>
+  </header>
+  <main class="max-w-3xl mx-auto px-4 py-8">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

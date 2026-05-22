@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Submit run — EL{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">Submit a niche run</h1>
+<p class="text-slate-600 mb-6">Kicks off the dropshipping pipeline against the given niche.</p>
+
+<form id="niche-form"
+      hx-post="/api/runs"
+      hx-ext="json-enc"
+      hx-headers='{"Content-Type": "application/json"}'
+      hx-target="#submit-result"
+      hx-swap="innerHTML"
+      class="space-y-4 bg-white rounded-lg border p-6 shadow-sm">
+  <div>
+    <label for="niche" class="block text-sm font-medium mb-1">Niche</label>
+    <input id="niche" name="niche" type="text" required
+           placeholder="e.g. wireless earbuds"
+           class="w-full border rounded px-3 py-2" />
+  </div>
+  <div>
+    <label for="dislikes" class="block text-sm font-medium mb-1">Dislikes (optional)</label>
+    <input id="dislikes" name="dislikes" type="text"
+           placeholder="e.g. loud, gaudy"
+           class="w-full border rounded px-3 py-2" />
+  </div>
+  <div>
+    <label for="budget_usd" class="block text-sm font-medium mb-1">Budget (USD, optional)</label>
+    <input id="budget_usd" name="budget_usd" type="number" step="0.01" min="0"
+           class="w-full border rounded px-3 py-2" />
+  </div>
+  <button type="submit"
+          class="bg-slate-900 text-white rounded px-4 py-2 hover:bg-slate-700">
+    Submit
+  </button>
+</form>
+
+<div id="submit-result" class="mt-6"></div>
+
+<script>
+  // After successful submit, redirect to the run page.
+  document.body.addEventListener("htmx:afterRequest", function (e) {
+    if (e.detail.elt && e.detail.elt.id === "niche-form" && e.detail.xhr.status === 202) {
+      try {
+        var body = JSON.parse(e.detail.xhr.responseText);
+        if (body.request_id) window.location.href = "/run/" + body.request_id;
+      } catch (_) { /* leave result in #submit-result */ }
+    }
+  });
+</script>
+{% endblock %}
