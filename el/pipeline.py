@@ -21,6 +21,7 @@ from el.nodes import (
     embed_candidate_products,
     drive_upload,
     filter_top_30,
+    generate_shopify_theme,
     if_callback_finalized_review,
     mark_telegram_photo_sent,
     mark_telegram_text_fallback,
@@ -39,6 +40,8 @@ from el.nodes import (
     stochastic_logger,
     supabase_insert_hil_reviews,
     telegram_alert,
+    upload_shopify_products,
+    upload_shopify_theme,
     write_curated_picks,
     write_rows_to_sheet,
     youtube_trending,
@@ -180,6 +183,14 @@ def run(initial_ctx: dict | None = None) -> dict:
         email_product_detail.run(ctx)
     else:
         log.warning("GMAIL_SMTP_* not set - skipping outbound email nodes")
+
+    # SP5b: Shopify auto-store (theme + products). Gated on Shopify creds.
+    if config.get("SHOPIFY_STORE_DOMAIN") and config.get("SHOPIFY_ADMIN_API_TOKEN"):
+        generate_shopify_theme.run(ctx)
+        upload_shopify_theme.run(ctx)
+        upload_shopify_products.run(ctx)
+    else:
+        log.warning("SHOPIFY_* not set - skipping Shopify auto-store")
 
     # SP5a: business notification + dev alert (both safe with TELEGRAM bot token).
     if config.get("TELEGRAM_HIL_BOT_TOKEN"):

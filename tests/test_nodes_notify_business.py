@@ -53,3 +53,23 @@ def test_uses_business_chat_id_when_set(monkeypatch):
     tg = FakeTelegram()
     notify_business.run(ctx, provider=tg)
     assert tg.calls[0]["chat_id"] == "999"
+
+
+def test_appends_shopify_store_url_when_present():
+    ctx = {
+        "request_id": "r-1",
+        "niche": "yoga",
+        "hil_review_rows": [{"product_name": "Mat"}],
+        "shopify_store_url": "https://shop.myshopify.com",
+    }
+    tg = FakeTelegram()
+    notify_business.run(ctx, provider=tg)
+    text = tg.calls[0]["text"]
+    assert "Store: https://shop.myshopify.com" in text
+
+
+def test_no_store_url_no_store_line():
+    ctx = {"request_id": "r-1", "niche": "yoga", "hil_review_rows": [{"product_name": "Mat"}]}
+    tg = FakeTelegram()
+    notify_business.run(ctx, provider=tg)
+    assert "Store:" not in tg.calls[0]["text"]
