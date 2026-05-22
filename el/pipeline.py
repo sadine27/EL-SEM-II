@@ -16,6 +16,8 @@ from el.nodes import (
     create_day_tab,
     curate_picks,
     download_product_image,
+    email_digest,
+    email_product_detail,
     embed_candidate_products,
     drive_upload,
     filter_top_30,
@@ -24,6 +26,7 @@ from el.nodes import (
     mark_telegram_text_fallback,
     merge_review_sources,
     normalize_cj_review,
+    notify_business,
     parse_hil_callback,
     phase4_candidate_selection,
     pick_top_3,
@@ -35,6 +38,7 @@ from el.nodes import (
     send_hil_telegram_text_fallback,
     stochastic_logger,
     supabase_insert_hil_reviews,
+    telegram_alert,
     write_curated_picks,
     write_rows_to_sheet,
     youtube_trending,
@@ -169,6 +173,21 @@ def run(initial_ctx: dict | None = None) -> dict:
             log.warning("GOOGLE_SERVICE_ACCOUNT_JSON not set - skipping Write Curated Picks")
     else:
         log.warning("GOOGLE_SERVICE_ACCOUNT_JSON not set - skipping Dropship AI Agent (Vertex AI)")
+
+    # SP5a: end-of-run outbound (gated by Gmail SMTP creds).
+    if config.get("GMAIL_SMTP_USER") and config.get("GMAIL_SMTP_APP_PASSWORD"):
+        email_digest.run(ctx)
+        email_product_detail.run(ctx)
+    else:
+        log.warning("GMAIL_SMTP_* not set - skipping outbound email nodes")
+
+    # SP5a: business notification + dev alert (both safe with TELEGRAM bot token).
+    if config.get("TELEGRAM_HIL_BOT_TOKEN"):
+        notify_business.run(ctx)
+        if ctx.get("formatted_error"):
+            telegram_alert.run(ctx)
+    elif ctx.get("formatted_error"):
+        log.warning("TELEGRAM_HIL_BOT_TOKEN not set - skipping notify_business + telegram_alert")
 
     log.info("EL pipeline run end (ctx keys: %s)", list(ctx.keys()))
     return ctx
