@@ -79,10 +79,15 @@ def _fetch_all_sources(sources, ctx: dict) -> list[TrendCandidate]:
     return aggregated
 
 
-def run() -> dict:
-    """Execute the daily batch. Nodes are wired in order from EL.json."""
+def run(initial_ctx: dict | None = None) -> dict:
+    """Execute the daily batch. Nodes are wired in order from EL.json.
+
+    ``initial_ctx`` (SP4): optional seed values placed into the ctx before any
+    node runs. Used by ``run_for_request`` to inject user-supplied niche /
+    dislikes / budget. Existing callers pass nothing and behavior is unchanged.
+    """
     log.info("EL pipeline run start")
-    ctx: dict = {}
+    ctx: dict = dict(initial_ctx) if initial_ctx else {}
 
     # SP2: load enabled sources into ctx["source_candidates"]. This is additive —
     # no downstream node consumes source_candidates yet; score_rank still reads
@@ -167,3 +172,39 @@ def run() -> dict:
 
     log.info("EL pipeline run end (ctx keys: %s)", list(ctx.keys()))
     return ctx
+
+
+def run_for_request(request_id: str, *, db_provider=None) -> str:
+    """SP4: run the pipeline for a user-submitted request row.
+
+    Reads the row from ``private.run_requests``, marks it ``running``, seeds
+    ctx with the user-supplied niche/dislikes/budget, calls ``run()``, and
+    marks the row ``done`` or ``error``. Returns the final status.
+    """
+    from el.supabase import SupabaseRestProvider
+    from el.web import run_service
+
+    db = db_provider or SupabaseRestProvider()
+    row = run_service.get_run(request_id=request_id, db_provider=db)
+    if row is None:
+        raise ValueError(f"run_request {request_id} not found")
+
+    run_service.mark_running(
+        request_id=request_id, pipeline_run_id=None, db_provider=db,
+    )
+    try:
+        initial_ctx = {
+            "niche": row.get("niche"),
+            "dislikes": row.get("dislikes"),
+            "budget_usd": row.get("budget_usd"),
+            "run_request_id": request_id,
+        }
+        run(initial_ctx=initial_ctx)
+    except Exception as exc:
+        run_service.mark_error(
+            request_id=request_id, error_message=str(exc), db_provider=db,
+        )
+        return "error"
+
+    run_service.mark_done(request_id=request_id, db_provider=db)
+    return "done"

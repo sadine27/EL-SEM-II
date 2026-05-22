@@ -1,0 +1,3 @@
+/* SP4 — minimal style overrides on top of Tailwind CDN. */
+body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: inherit; }

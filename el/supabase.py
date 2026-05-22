@@ -14,6 +14,8 @@ HIL_LOGGING_EVENTS_TABLE = "hil_logging_events"
 PRODUCT_EMBEDDINGS_TABLE = "product_embeddings"
 PRODUCT_EMBEDDINGS_CONFLICT_COLUMNS = ("product_key",)
 MATCH_PRODUCT_EMBEDDINGS_FN = "match_product_embeddings"
+RUN_REQUESTS_TABLE = "run_requests"
+RUN_REQUESTS_SCHEMA = "private"
 HIL_REVIEWS_CONFLICT_COLUMNS = (
     "workflow_run_id",
     "source_provider",
