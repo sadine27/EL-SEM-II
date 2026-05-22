@@ -18,7 +18,7 @@ _Last updated: 2026-05-22 (SP4 merged to main)._
 | SP1 | Telemetry Foundation | ✅ merged to main | All 10 plan tasks merged via fast-forward (see Roadmap revisions §1). 433/433 tests green, 92% overall coverage. Iteration log at `docs/SP1_LOG.md`. **Pending:** human-driven production smoke run (see SP1_LOG runbook §4). |
 | SP2 | Source Expansion | ✅ merged to main | Squash-merged at `cbb6b9a`. Scoped to 2 sources (YouTube refactor + Shopify competitor); 4 sources deferred per SP2 design spec §1. 463/463 tests green. Iteration log at `docs/SP2_LOG.md`. **Pending:** optional production smoke if Shopify-competitor is enabled. |
 | SP3 | Vision + pgvector | ✅ merged to main | Squash-merged at `dc2d400`. Vertex multimodal embeddings + pgvector HNSW + find_similar helper. Bing Visual Search deferred. 488/488 tests green. **Pending:** apply migration + production smoke (verify Vertex spend ≤ $0.02). |
-| SP4 | FastAPI + RAG chat bot | ✅ merged to main | Squash-merged at `<SQUASH_SHA>`. FastAPI app at `el/web/`, bearer auth, in-memory rate limit, RAG chat over SSE, HTMX shell pages. Supabase Auth magic-link + Telegram WebApp + Redis deferred to SP6/SP8. 555/555 tests green. Iteration log at `docs/SP4_LOG.md`. **Pending:** apply migration + browser smoke per SP4_LOG runbook. |
+| SP4 | FastAPI + RAG chat bot | ✅ merged to main | Squash-merged at `8c1b3da`. FastAPI app at `el/web/`, bearer auth, in-memory rate limit, RAG chat over SSE, HTMX shell pages. Supabase Auth magic-link + Telegram WebApp + Redis deferred to SP6/SP8. 555/555 tests green. Iteration log at `docs/SP4_LOG.md`. **Pending:** apply migration + browser smoke per SP4_LOG runbook. |
 | SP5 | Outbound (email, Shopify auto-store, notify) | ⬜ not started | Design pending. |
 | SP6 | CRM minimal | ⬜ not started | Design pending. Depends on SP1+SP4+SP5. |
 | SP8 | Docker + Hetzner deploy | ⬜ not started | Design pending. Depends on all user-facing SPs. |
@@ -82,7 +82,7 @@ SP1 ─► SP2 ─► SP3 ─► SP4 ─► SP5 ─► SP6 ─► SP8 ─► SP7
 
 ### SP4 — FastAPI + RAG chat bot ✅
 
-- **Merged:** `<SQUASH_SHA>` (squash) on 2026-05-22.
+- **Merged:** `8c1b3da` (squash) on 2026-05-22.
 - **Design:** `docs/superpowers/specs/2026-05-21-sp4-web-and-chat-design.md` ✅
 - **Plan:** `docs/superpowers/plans/2026-05-21-sp4-web-and-chat.md` ✅
 - **Iteration log:** `docs/SP4_LOG.md` ✅
