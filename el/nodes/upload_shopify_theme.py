@@ -298,9 +298,18 @@ def run(ctx: dict, *, provider: shopify.ShopifyAdminProvider | None = None) -> d
             TOKENS_CSS_KEY: _render_tokens_css(theme),
             INDEX_JSON_KEY: _render_index_json(theme),
         }
+        backup = {}
+        ctx["shopify_theme_backup"] = backup
         for key, value in uploads.items():
             if key not in ALLOWED_ASSET_KEYS:
                 raise shopify.ShopifyError(f"disallowed theme asset key: {key}")
+            current = provider.get_theme_asset(int(theme_id), key)
+            prior_value = current.get("value") if isinstance(current, dict) else None
+            if prior_value is not None:
+                backup[key] = prior_value
+            if value == prior_value:
+                log.info("upload_shopify_theme: no-op, asset unchanged")
+                continue
             provider.update_theme_asset(int(theme_id), key, value)
         ctx["shopify_theme_result"] = {
             "ok": True,

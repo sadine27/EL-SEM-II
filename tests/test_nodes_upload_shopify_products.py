@@ -10,15 +10,26 @@ class FakeShopify:
     def __init__(self, fail_names: set[str] | None = None):
         self.fail_names = fail_names or set()
         self.created: list[tuple[dict, str | None]] = []
+        self.products_by_handle: dict[str, dict] = {}
         self._next_id = 100
+
+    def find_product_by_handle(self, handle):
+        return self.products_by_handle.get(handle)
 
     def create_product(self, payload, *, idempotency_key=None):
         title = payload["product"]["title"]
         if title in self.fail_names:
             raise RuntimeError(f"shopify boom: {title}")
+        if idempotency_key:
+            existing = self.find_product_by_handle(idempotency_key)
+            if existing is not None:
+                return existing
         self.created.append((payload, idempotency_key))
         self._next_id += 1
-        return {"id": self._next_id, "handle": idempotency_key, "title": title}
+        product = {"id": self._next_id, "handle": idempotency_key, "title": title}
+        if idempotency_key:
+            self.products_by_handle[idempotency_key] = product
+        return product
 
 
 @pytest.fixture(autouse=True)
@@ -97,3 +108,24 @@ def test_falls_back_to_curated_picks():
     upload_shopify_products.run(ctx, provider=shop)
     assert len(shop.created) == 2
     assert shop.created[0][0]["product"]["title"] == "T1"
+
+
+def test_rerun_does_not_create_duplicate_products():
+    ctx = {
+        "request_id": "r-5",
+        "niche": "yoga",
+        "hil_review_rows": [
+            {"product_name": "Mat", "price_text": "29.99"},
+            {"product_name": "Block", "price_numeric": 12},
+        ],
+    }
+    shop = FakeShopify()
+
+    upload_shopify_products.run(ctx, provider=shop)
+    first_post_count = len(shop.created)
+    upload_shopify_products.run(ctx, provider=shop)
+    second_run_posts = len(shop.created) - first_post_count
+
+    assert first_post_count == 2
+    assert second_run_posts == 0
+    assert ctx["shopify_store_url"] == "https://shop.myshopify.com"

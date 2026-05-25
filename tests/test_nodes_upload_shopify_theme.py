@@ -7,13 +7,27 @@ from el.nodes import upload_shopify_theme
 
 
 class FakeShopify:
-    def __init__(self, *, main_id: int | None = 5, raise_on_asset: bool = False):
+    def __init__(
+        self,
+        *,
+        main_id: int | None = 5,
+        raise_on_asset: bool = False,
+        assets: dict[str, str] | None = None,
+    ):
         self.main_id = main_id
         self.raise_on_asset = raise_on_asset
+        self.assets = assets or {}
+        self.get_asset_calls: list[tuple[int, str]] = []
         self.asset_calls: list[tuple[int, str, str]] = []
 
     def get_main_theme_id(self):
         return self.main_id
+
+    def get_theme_asset(self, theme_id, key):
+        self.get_asset_calls.append((theme_id, key))
+        if key in self.assets:
+            return {"key": key, "value": self.assets[key]}
+        return {}
 
     def update_theme_asset(self, theme_id, key, value):
         self.asset_calls.append((theme_id, key, value))
@@ -46,6 +60,8 @@ def test_happy_path_uploads_only_guarded_assets():
         "templates/index.json",
     ]
     assert len(shop.asset_calls) == 2
+    assert len(shop.get_asset_calls) == 2
+    assert ctx["shopify_theme_backup"] == {}
     assert set(_uploads_by_key(shop)) == {"assets/tokens.css", "templates/index.json"}
     assert "snippets/el-story.liquid" not in _uploads_by_key(shop)
 
@@ -179,3 +195,46 @@ def test_invalid_values_fall_back_safely():
     assert index["sections"]["hero"]["settings"]["image_style"] == "product-focused"
     assert index["sections"]["product_grid"]["settings"]["product_limit"] == 24
     assert index["sections"]["product_grid"]["settings"]["collection_handle"] == "allproducts"
+
+
+def test_backup_populated_on_first_overwrite():
+    ctx = {"shopify_theme": THEME}
+    shop = FakeShopify(assets={"assets/tokens.css": "old tokens"})
+
+    upload_shopify_theme.run(ctx, provider=shop)
+
+    assert ctx["shopify_theme_result"]["ok"] is True
+    assert ctx["shopify_theme_backup"] == {"assets/tokens.css": "old tokens"}
+    assert _uploads_by_key(shop)["assets/tokens.css"] != "old tokens"
+
+
+def test_no_op_when_content_unchanged():
+    rendered_tokens = upload_shopify_theme._render_tokens_css(THEME)
+    rendered_index = upload_shopify_theme._render_index_json(THEME)
+    ctx = {"shopify_theme": THEME}
+    shop = FakeShopify(
+        assets={
+            "assets/tokens.css": rendered_tokens,
+            "templates/index.json": rendered_index,
+        }
+    )
+
+    upload_shopify_theme.run(ctx, provider=shop)
+
+    assert ctx["shopify_theme_result"]["ok"] is True
+    assert ctx["shopify_theme_backup"] == {
+        "assets/tokens.css": rendered_tokens,
+        "templates/index.json": rendered_index,
+    }
+    assert shop.asset_calls == []
+
+
+def test_backup_empty_when_asset_is_new():
+    ctx = {"shopify_theme": THEME}
+    shop = FakeShopify()
+
+    upload_shopify_theme.run(ctx, provider=shop)
+
+    assert ctx["shopify_theme_result"]["ok"] is True
+    assert ctx["shopify_theme_backup"] == {}
+    assert len(shop.asset_calls) == 2

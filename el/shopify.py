@@ -6,6 +6,7 @@ No SDK; plain `requests`. Fail-soft retry on 429/5xx.
 """
 from __future__ import annotations
 
+import re
 import time
 from typing import Protocol
 
@@ -21,6 +22,7 @@ DEFAULT_TIMEOUT = 30
 _RETRY_STATUS = {429, 500, 502, 503, 504}
 TOKEN_EXPIRY_SKEW_SECONDS = 60
 DEFAULT_CLIENT_CREDENTIALS_EXPIRES_IN = 24 * 60 * 60
+SHOPIFY_SECRET_PATTERN = re.compile(r"shp(?:at|ca)_[A-Za-z0-9]+")
 
 
 class ShopifyError(RuntimeError):
@@ -30,6 +32,7 @@ class ShopifyError(RuntimeError):
 class ShopifyAdminProvider(Protocol):
     def list_themes(self) -> list[dict]: ...
     def get_main_theme_id(self) -> int | None: ...
+    def get_theme_asset(self, theme_id: int, key: str) -> dict: ...
     def update_theme_asset(self, theme_id: int, key: str, value: str) -> dict: ...
     def create_product(
         self, payload: dict, *, idempotency_key: str | None = None
@@ -73,6 +76,13 @@ class ShopifyRestProvider:
     def oauth_url(self) -> str:
         return f"https://{self.domain}/admin/oauth/access_token"
 
+    def _redact(self, text: str) -> str:
+        redacted = SHOPIFY_SECRET_PATTERN.sub("***REDACTED***", text)
+        for secret in (self.token, self.client_secret):
+            if secret:
+                redacted = redacted.replace(secret, "***REDACTED***")
+        return redacted
+
     def _access_token(self) -> str:
         if self.token:
             return self.token
@@ -106,11 +116,14 @@ class ShopifyRestProvider:
                 timeout=self.timeout,
             )
         except requests.RequestException as exc:
-            raise ShopifyError(f"POST /admin/oauth/access_token network error: {exc}") from exc
+            raise ShopifyError(
+                f"POST /admin/oauth/access_token network error: {self._redact(str(exc))}"
+            ) from exc
 
         if resp.status_code >= 400:
+            text = self._redact(resp.text)
             raise ShopifyError(
-                f"POST /admin/oauth/access_token failed {resp.status_code}: {resp.text[:300]}"
+                f"POST /admin/oauth/access_token failed {resp.status_code}: {text[:300]}"
             )
 
         try:
@@ -154,7 +167,9 @@ class ShopifyRestProvider:
             except requests.RequestException as exc:
                 last_exc = exc
                 if attempt == self.max_retries:
-                    raise ShopifyError(f"{method} {path} network error: {exc}") from exc
+                    raise ShopifyError(
+                        f"{method} {path} network error: {self._redact(str(exc))}"
+                    ) from exc
                 self._sleep(2 ** (attempt - 1))
                 continue
             if resp.status_code in _RETRY_STATUS and attempt < self.max_retries:
@@ -162,11 +177,13 @@ class ShopifyRestProvider:
                 self._sleep(2 ** (attempt - 1))
                 continue
             if resp.status_code >= 400:
+                text = self._redact(resp.text)
                 raise ShopifyError(
-                    f"{method} {path} failed {resp.status_code}: {resp.text[:300]}"
+                    f"{method} {path} failed {resp.status_code}: {text[:300]}"
                 )
             return resp
-        raise ShopifyError(f"{method} {path} exhausted retries: {last_exc}")
+        last_exc_text = self._redact(str(last_exc)) if last_exc else last_exc
+        raise ShopifyError(f"{method} {path} exhausted retries: {last_exc_text}")
 
     def list_themes(self) -> list[dict]:
         resp = self._request("GET", "/themes.json")
@@ -177,6 +194,14 @@ class ShopifyRestProvider:
             if theme.get("role") == "main":
                 return int(theme["id"])
         return None
+
+    def get_theme_asset(self, theme_id: int, key: str) -> dict:
+        resp = self._request(
+            "GET",
+            f"/themes/{theme_id}/assets.json",
+            params={"asset[key]": key},
+        )
+        return resp.json().get("asset", {}) or {}
 
     def update_theme_asset(self, theme_id: int, key: str, value: str) -> dict:
         body = {"asset": {"key": key, "value": value}}
