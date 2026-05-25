@@ -44,6 +44,9 @@ Validate credentials end-to-end with:
 .venv\Scripts\python.exe scripts\verify_env.py
 ```
 
+For Shopify dev-store setup, required scopes, smoke testing, and rollback, see
+`docs/runbooks/shopify.md`.
+
 ## Run Tests
 
 ```powershell

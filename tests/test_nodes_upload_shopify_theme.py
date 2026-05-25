@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 
 from el.nodes import upload_shopify_theme
 
@@ -49,6 +51,18 @@ def _uploads_by_key(shop: FakeShopify) -> dict[str, str]:
     return {key: value for _, key, value in shop.asset_calls}
 
 
+def _existing_shell_assets() -> dict[str, str]:
+    return {key: "existing shell" for key in upload_shopify_theme.TRUSTED_SHELL_ASSET_KEYS}
+
+
+def _ai_uploads_by_key(shop: FakeShopify) -> dict[str, str]:
+    return {
+        key: value
+        for _, key, value in shop.asset_calls
+        if key in upload_shopify_theme.ALLOWED_ASSET_KEYS
+    }
+
+
 def test_happy_path_uploads_only_guarded_assets():
     ctx = {"shopify_theme": THEME}
     shop = FakeShopify()
@@ -59,10 +73,12 @@ def test_happy_path_uploads_only_guarded_assets():
         "assets/tokens.css",
         "templates/index.json",
     ]
-    assert len(shop.asset_calls) == 2
-    assert len(shop.get_asset_calls) == 2
+    assert len(shop.asset_calls) == 7
+    assert len(shop.get_asset_calls) == 7
     assert ctx["shopify_theme_backup"] == {}
-    assert set(_uploads_by_key(shop)) == {"assets/tokens.css", "templates/index.json"}
+    assert set(_ai_uploads_by_key(shop)) == {"assets/tokens.css", "templates/index.json"}
+    shell_uploads = set(_uploads_by_key(shop)) - upload_shopify_theme.ALLOWED_ASSET_KEYS
+    assert shell_uploads == set(upload_shopify_theme.TRUSTED_SHELL_ASSET_KEYS)
     assert "snippets/el-story.liquid" not in _uploads_by_key(shop)
 
 
@@ -100,7 +116,7 @@ def test_old_schema_maps_to_tokens_and_index_json():
     ctx = {"shopify_theme": THEME}
     shop = FakeShopify()
     upload_shopify_theme.run(ctx, provider=shop)
-    uploads = _uploads_by_key(shop)
+    uploads = _ai_uploads_by_key(shop)
     tokens = uploads["assets/tokens.css"]
     index = json.loads(uploads["templates/index.json"])
 
@@ -155,7 +171,9 @@ def test_asset_path_restrictions_are_hardcoded():
     }}
     shop = FakeShopify()
     upload_shopify_theme.run(ctx, provider=shop)
-    assert set(_uploads_by_key(shop)) == {"assets/tokens.css", "templates/index.json"}
+    assert set(_ai_uploads_by_key(shop)) == {"assets/tokens.css", "templates/index.json"}
+    shell_uploads = set(_uploads_by_key(shop)) - upload_shopify_theme.ALLOWED_ASSET_KEYS
+    assert shell_uploads == set(upload_shopify_theme.TRUSTED_SHELL_ASSET_KEYS)
 
 
 def test_invalid_values_fall_back_safely():
@@ -182,7 +200,7 @@ def test_invalid_values_fall_back_safely():
     ctx = {"shopify_theme": bad}
     shop = FakeShopify()
     upload_shopify_theme.run(ctx, provider=shop)
-    uploads = _uploads_by_key(shop)
+    uploads = _ai_uploads_by_key(shop)
     tokens = uploads["assets/tokens.css"]
     index = json.loads(uploads["templates/index.json"])
 
@@ -214,6 +232,7 @@ def test_no_op_when_content_unchanged():
     ctx = {"shopify_theme": THEME}
     shop = FakeShopify(
         assets={
+            **_existing_shell_assets(),
             "assets/tokens.css": rendered_tokens,
             "templates/index.json": rendered_index,
         }
@@ -237,4 +256,68 @@ def test_backup_empty_when_asset_is_new():
 
     assert ctx["shopify_theme_result"]["ok"] is True
     assert ctx["shopify_theme_backup"] == {}
-    assert len(shop.asset_calls) == 2
+    assert len(shop.asset_calls) == 7
+    assert set(_ai_uploads_by_key(shop)) == {"assets/tokens.css", "templates/index.json"}
+
+
+def test_all_trusted_shell_files_exist():
+    expected_names = set(upload_shopify_theme.SECTION_TYPE_BY_ID.values())
+    assert set(upload_shopify_theme.TRUSTED_SHELL_ASSET_KEYS) == {
+        f"sections/{name}.liquid" for name in expected_names
+    }
+    for path in upload_shopify_theme.TRUSTED_SHELL_ASSET_KEYS.values():
+        assert Path(path).is_file()
+
+
+def test_trusted_shell_schema_matches_section_settings():
+    normalized = upload_shopify_theme._normalize_theme(THEME)
+    section_id_by_type = {
+        section_type: section_id
+        for section_id, section_type in upload_shopify_theme.SECTION_TYPE_BY_ID.items()
+    }
+    for path in upload_shopify_theme.TRUSTED_SHELL_ASSET_KEYS.values():
+        text = Path(path).read_text(encoding="utf-8")
+        schema_match = re.search(r"{% schema %}\s*(.*?)\s*{% endschema %}", text, re.DOTALL)
+        assert schema_match
+        schema = json.loads(schema_match.group(1))
+        schema_keys = {setting["id"] for setting in schema["settings"]}
+        section_id = section_id_by_type[path.stem]
+        assert schema_keys == set(
+            upload_shopify_theme._section_settings(section_id, normalized)
+        )
+        assert "{{ 'tokens.css' | asset_url | stylesheet_tag }}" in text
+        assert "<script" not in text.lower()
+        assert "{% render" not in text
+        assert "{% include" not in text
+
+
+def test_only_approved_shell_asset_paths_are_used():
+    for key in upload_shopify_theme.TRUSTED_SHELL_ASSET_KEYS:
+        assert key.startswith("sections/")
+        assert key.endswith(".liquid")
+        assert ".." not in key
+    assert set(upload_shopify_theme.TRUSTED_SHELL_ASSET_KEYS).isdisjoint(
+        upload_shopify_theme.ALLOWED_ASSET_KEYS
+    )
+
+
+def test_trusted_shell_uploads_occur_only_when_missing():
+    ctx = {"shopify_theme": THEME}
+    existing_shells = dict(_existing_shell_assets())
+    existing_shells.pop("sections/hero-shell.liquid")
+    shop = FakeShopify(assets=existing_shells)
+
+    upload_shopify_theme.run(ctx, provider=shop)
+
+    uploaded_shells = set(_uploads_by_key(shop)) - upload_shopify_theme.ALLOWED_ASSET_KEYS
+    assert uploaded_shells == {"sections/hero-shell.liquid"}
+
+
+def test_shell_section_types_come_only_from_section_type_map():
+    assert {
+        path.stem for path in upload_shopify_theme.TRUSTED_SHELL_ASSET_KEYS.values()
+    } == set(upload_shopify_theme.SECTION_TYPE_BY_ID.values())
+
+    rendered = json.loads(upload_shopify_theme._render_index_json(THEME))
+    section_types = {section["type"] for section in rendered["sections"].values()}
+    assert section_types <= set(upload_shopify_theme.SECTION_TYPE_BY_ID.values())

@@ -9,6 +9,7 @@ from __future__ import annotations
 import html
 import json
 import re
+from pathlib import Path
 
 from el import shopify
 from el.logger import get_logger
@@ -33,6 +34,12 @@ DEFAULT_SECTION_ORDER = [
     "promo",
     "footer",
 ]
+
+THEME_SHELL_SECTIONS_DIR = Path(__file__).resolve().parents[1] / "assets" / "theme_shells" / "sections"
+TRUSTED_SHELL_ASSET_KEYS = {
+    f"sections/{section_type}.liquid": THEME_SHELL_SECTIONS_DIR / f"{section_type}.liquid"
+    for section_type in SECTION_TYPE_BY_ID.values()
+}
 
 _HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 _UNSAFE_FONT_RE = re.compile(r"[{}<>;\r\n]")
@@ -281,6 +288,10 @@ def _render_index_json(theme: dict) -> str:
     return json.dumps(payload, indent=2) + "\n"
 
 
+def _trusted_shell_uploads() -> dict[str, str]:
+    return {key: path.read_text(encoding="utf-8") for key, path in TRUSTED_SHELL_ASSET_KEYS.items()}
+
+
 def run(ctx: dict, *, provider: shopify.ShopifyAdminProvider | None = None) -> dict:
     theme = ctx.get("shopify_theme") or {}
     if not theme:
@@ -294,6 +305,14 @@ def run(ctx: dict, *, provider: shopify.ShopifyAdminProvider | None = None) -> d
         theme_id = ctx.get("shopify_theme_id") or provider.get_main_theme_id()
         if not theme_id:
             raise shopify.ShopifyError("no main theme found")
+        shell_uploads = _trusted_shell_uploads()
+        for key, value in shell_uploads.items():
+            if key not in TRUSTED_SHELL_ASSET_KEYS:
+                raise shopify.ShopifyError(f"disallowed theme shell asset key: {key}")
+            current = provider.get_theme_asset(int(theme_id), key)
+            if isinstance(current, dict) and current.get("value") is not None:
+                continue
+            provider.update_theme_asset(int(theme_id), key, value)
         uploads = {
             TOKENS_CSS_KEY: _render_tokens_css(theme),
             INDEX_JSON_KEY: _render_index_json(theme),

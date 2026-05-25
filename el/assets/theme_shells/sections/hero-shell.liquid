@@ -1,0 +1,73 @@
+{{ 'tokens.css' | asset_url | stylesheet_tag }}
+
+<section class="el-shell el-hero" aria-labelledby="el-hero-heading">
+  <div class="el-shell__inner">
+    <p class="el-shell__eyebrow">{{ section.settings.brand_name | escape }}</p>
+    <h1 id="el-hero-heading">{{ section.settings.headline | escape }}</h1>
+    <p>{{ section.settings.subhead | escape }}</p>
+    <a class="el-shell__button" href="{{ section.settings.cta_link | escape }}">
+      {{ section.settings.cta_label | escape }}
+    </a>
+  </div>
+</section>
+
+<style>
+  .el-shell {
+    background: var(--el-bg);
+    color: var(--el-text);
+    font-family: var(--el-font-body);
+    padding: 4rem 1.5rem;
+  }
+  .el-shell__inner {
+    max-width: 72rem;
+    margin: 0 auto;
+  }
+  .el-shell h1 {
+    color: var(--el-primary);
+    font-family: var(--el-font-heading);
+    font-size: clamp(2rem, 5vw, 4rem);
+    margin: 0 0 1rem;
+  }
+  .el-shell p {
+    color: var(--el-muted);
+    max-width: 42rem;
+  }
+  .el-shell__eyebrow {
+    color: var(--el-accent);
+    font-weight: 700;
+  }
+  .el-shell__button {
+    background: var(--el-primary);
+    border-radius: var(--el-radius);
+    color: var(--el-bg);
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.85rem 1.2rem;
+    text-decoration: none;
+  }
+</style>
+
+{% schema %}
+{
+  "name": "EL Hero Shell",
+  "settings": [
+    { "type": "text", "id": "brand_name", "label": "Brand name" },
+    { "type": "text", "id": "headline", "label": "Headline" },
+    { "type": "text", "id": "subhead", "label": "Subhead" },
+    { "type": "text", "id": "cta_label", "label": "CTA label" },
+    { "type": "url", "id": "cta_link", "label": "CTA link" },
+    {
+      "type": "select",
+      "id": "image_style",
+      "label": "Image style",
+      "options": [
+        { "value": "product-focused", "label": "Product focused" },
+        { "value": "lifestyle", "label": "Lifestyle" },
+        { "value": "minimal", "label": "Minimal" }
+      ],
+      "default": "product-focused"
+    }
+  ],
+  "presets": [{ "name": "EL Hero Shell" }]
+}
+{% endschema %}
