@@ -10,8 +10,10 @@ import requests
 from el import config
 
 DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
+DRIVE_EXPORT_URL = "https://www.googleapis.com/drive/v3/files/{file_id}/export"
 DEFAULT_FOLDER_ID = "1M0FRJeZ6uguJSfmheWwU8hwiZe_tjVja"
 SCRAPED_FOLDER_ID = "1jihlrDk1iKxGO7v4VChrEhPphaBPfvhx"
+XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 SCOPES = ("https://www.googleapis.com/auth/drive.file",)
 DEFAULT_TIMEOUT = 30
 
@@ -24,6 +26,9 @@ class DriveProvider(Protocol):
         mime_type: str,
         folder_id: str = DEFAULT_FOLDER_ID,
     ) -> dict:
+        ...
+
+    def export_file(self, file_id: str, mime_type: str) -> bytes:
         ...
 
 
@@ -61,6 +66,20 @@ class GoogleDriveProvider:
         )
         resp.raise_for_status()
         return resp.json()
+
+    def export_file(self, file_id: str, mime_type: str = XLSX_MIME_TYPE) -> bytes:
+        """Export a Google-native file (Sheet/Doc/Slide) as the given MIME type.
+
+        For Google Sheets, mime_type defaults to XLSX. Returns raw file bytes.
+        """
+        resp = requests.get(
+            DRIVE_EXPORT_URL.format(file_id=file_id),
+            headers={"Authorization": f"Bearer {self._access_token()}"},
+            params={"mimeType": mime_type},
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return resp.content
 
     def _access_token(self) -> str:
         try:
