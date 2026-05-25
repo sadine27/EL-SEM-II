@@ -11,7 +11,7 @@ This is a **meta-document**. It does not design or specify any sub-project. Each
 
 ## Status snapshot
 
-_Last updated: 2026-05-22 (SP4 merged to main)._
+_Last updated: 2026-05-25 (SP5 merged to main)._
 
 | SP | Title | Status | Notes |
 |---|---|---|---|
@@ -19,12 +19,12 @@ _Last updated: 2026-05-22 (SP4 merged to main)._
 | SP2 | Source Expansion | ✅ merged to main | Squash-merged at `cbb6b9a`. Scoped to 2 sources (YouTube refactor + Shopify competitor); 4 sources deferred per SP2 design spec §1. 463/463 tests green. Iteration log at `docs/SP2_LOG.md`. **Pending:** optional production smoke if Shopify-competitor is enabled. |
 | SP3 | Vision + pgvector | ✅ merged to main | Squash-merged at `dc2d400`. Vertex multimodal embeddings + pgvector HNSW + find_similar helper. Bing Visual Search deferred. 488/488 tests green. **Pending:** apply migration + production smoke (verify Vertex spend ≤ $0.02). |
 | SP4 | FastAPI + RAG chat bot | ✅ merged to main | Squash-merged at `8c1b3da`. FastAPI app at `el/web/`, bearer auth, in-memory rate limit, RAG chat over SSE, HTMX shell pages. Supabase Auth magic-link + Telegram WebApp + Redis deferred to SP6/SP8. 555/555 tests green. Iteration log at `docs/SP4_LOG.md`. **Pending:** apply migration + browser smoke per SP4_LOG runbook. |
-| SP5 | Outbound (email, Shopify auto-store, notify) | ⬜ not started | Design pending. |
+| SP5 | Outbound (email, Shopify auto-store, notify) | ✅ merged to main | Squash-merged at `6eac26c`. Bundles SP5a (Gmail SMTP digest + per-product) and SP5b (Shopify Admin API theme + product upload); `notify_business` delivers live store URL. 602/602 tests green. Design specs at `docs/superpowers/specs/2026-05-22-sp5a-outbound-email-design.md` and `2026-05-22-sp5b-shopify-auto-store-design.md`. **Pending:** configure Gmail app password + Shopify dev-store creds in prod `.env`; live smoke of email + theme + product upload. |
 | SP6 | CRM minimal | ⬜ not started | Design pending. Depends on SP1+SP4+SP5. |
 | SP8 | Docker + Hetzner deploy | ⬜ not started | Design pending. Depends on all user-facing SPs. |
 | SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events. Sequenced last. |
 
-**Next action:** Start SP5 (Outbound — email, Shopify auto-store, notify) brainstorming. Pending human-side: SP1 + SP2 + SP3 + SP4 production smokes (per each SP_LOG). SP1 production smoke per `docs/SP1_LOG.md` §Deploy runbook step 4 (Supabase access required); SP2 production smoke per `docs/SP2_LOG.md` §Deploy runbook step 4 (optional — only if enabling Shopify-competitor); SP3 production smoke per `docs/SP3_LOG.md` (apply pgvector migration + verify Vertex spend); SP4 production smoke per `docs/SP4_LOG.md` (apply run_requests migration + boot uvicorn + browser smoke).
+**Next action:** Start SP6 (CRM minimal) brainstorming. Pending human-side: SP1 + SP2 + SP3 + SP4 + SP5 production smokes (per each SP_LOG and the SP5 design specs). SP1 production smoke per `docs/SP1_LOG.md` §Deploy runbook step 4 (Supabase access required); SP2 production smoke per `docs/SP2_LOG.md` §Deploy runbook step 4 (optional — only if enabling Shopify-competitor); SP3 production smoke per `docs/SP3_LOG.md` (apply pgvector migration + verify Vertex spend); SP4 production smoke per `docs/SP4_LOG.md` (apply run_requests migration + boot uvicorn + browser smoke); SP5 production smoke per the two SP5 design specs (Gmail app password + Shopify dev store + live send/upload run).
 
 **Step 0 status:** ✅ complete (2026-05-21). Paper work parked on `paper/phase2-revision` at commit `de79243`. `EL report content.docx` deleted (was an old Word version of the paper).
 
@@ -89,12 +89,12 @@ SP1 ─► SP2 ─► SP3 ─► SP4 ─► SP5 ─► SP6 ─► SP8 ─► SP7
 - **Shipped:** FastAPI app factory at `el/web/`, bearer-token auth (`hmac.compare_digest`), in-memory token-bucket rate limiter, `chat_rag.stream_answer` RAG generator over SP3 embeddings, SSE `/api/chat`, BackgroundTasks-driven `POST /api/runs`, three HTMX shell pages, `private.run_requests` table.
 - **Deferred to SP6/SP8:** Supabase Auth magic-link, Telegram WebApp trigger, Redis/Celery, APScheduler, marketing landing page (per SP4 spec §1).
 
-### SP5 — Outbound ⬜
+### SP5 — Outbound ✅
 
-- **Branch:** `feat/sp5-outbound`
-- **Master-spec deliverables:** `el/email.py` Gmail SMTP, `el/nodes/email_digest.py`, `el/nodes/email_product_detail.py`, `el/shopify.py`, `el/nodes/generate_shopify_theme.py`, `el/nodes/upload_shopify_theme.py`, `el/nodes/upload_shopify_products.py`, `el/nodes/notify_business.py`.
-- **Credentials to confirm at SP-start:** `GMAIL_SMTP_USER`, `GMAIL_SMTP_APP_PASSWORD`, `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_ADMIN_API_TOKEN`, `SHOPIFY_API_VERSION`, `BUSINESS_NOTIFY_TELEGRAM_CHAT_ID`.
-- **Estimated effort:** 5–7 days.
+- **Merged:** `6eac26c` (squash) on 2026-05-25.
+- **Design:** `docs/superpowers/specs/2026-05-22-sp5a-outbound-email-design.md` + `docs/superpowers/specs/2026-05-22-sp5b-shopify-auto-store-design.md` ✅
+- **Shipped:** `el/email.py` (Gmail SMTP w/ retry + STARTTLS), `el/nodes/email_digest.py`, `el/nodes/email_product_detail.py`, `el/shopify.py` (Admin API client w/ idempotency keys + retry), `el/nodes/generate_shopify_theme.py` (Vertex Gemini structured-output), `el/nodes/upload_shopify_theme.py`, `el/nodes/upload_shopify_products.py`, `el/nodes/notify_business.py` (Telegram operator ping w/ live store URL). 47 new tests; 602/602 total green.
+- **Deferred:** none (full SP5 scope delivered).
 
 ### SP6 — CRM minimal ⬜
 
