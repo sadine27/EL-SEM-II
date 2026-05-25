@@ -185,7 +185,10 @@ def run(initial_ctx: dict | None = None) -> dict:
         log.warning("GMAIL_SMTP_* not set - skipping outbound email nodes")
 
     # SP5b: Shopify auto-store (theme + products). Gated on Shopify creds.
-    if config.get("SHOPIFY_STORE_DOMAIN") and config.get("SHOPIFY_ADMIN_API_TOKEN"):
+    if config.get("SHOPIFY_STORE_DOMAIN") and (
+        config.get("SHOPIFY_ADMIN_API_TOKEN")
+        or (config.get("SHOPIFY_CLIENT_ID") and config.get("SHOPIFY_CLIENT_SECRET"))
+    ):
         generate_shopify_theme.run(ctx)
         upload_shopify_theme.run(ctx)
         upload_shopify_products.run(ctx)

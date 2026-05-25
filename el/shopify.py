@@ -1,7 +1,8 @@
 """SP5b — Shopify Admin REST API client (2024-10).
 
-Single-operator MVP: one configured dev store via SHOPIFY_STORE_DOMAIN +
-SHOPIFY_ADMIN_API_TOKEN. No SDK; plain `requests`. Fail-soft retry on 429/5xx.
+Single-operator MVP: one configured dev store via SHOPIFY_STORE_DOMAIN plus
+either SHOPIFY_ADMIN_API_TOKEN or SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET.
+No SDK; plain `requests`. Fail-soft retry on 429/5xx.
 """
 from __future__ import annotations
 
@@ -18,6 +19,8 @@ log = get_logger(__name__)
 SHOPIFY_API_VERSION = "2024-10"
 DEFAULT_TIMEOUT = 30
 _RETRY_STATUS = {429, 500, 502, 503, 504}
+TOKEN_EXPIRY_SKEW_SECONDS = 60
+DEFAULT_CLIENT_CREDENTIALS_EXPIRES_IN = 24 * 60 * 60
 
 
 class ShopifyError(RuntimeError):
@@ -46,19 +49,92 @@ class ShopifyRestProvider:
         sleep=time.sleep,
     ):
         self.domain = (domain or config.require("SHOPIFY_STORE_DOMAIN")).strip().rstrip("/")
-        self.token = token or config.require("SHOPIFY_ADMIN_API_TOKEN")
+        self.token = token or config.get("SHOPIFY_ADMIN_API_TOKEN")
+        self.client_id = config.get("SHOPIFY_CLIENT_ID")
+        self.client_secret = config.get("SHOPIFY_CLIENT_SECRET")
         self.api_version = api_version or config.get("SHOPIFY_API_VERSION", SHOPIFY_API_VERSION)
         self.timeout = timeout
         self.max_retries = max_retries
         self._sleep = sleep
+        self._cached_token: str | None = None
+        self._token_expires_at = 0.0
+
+        if not self.token and not (self.client_id and self.client_secret):
+            raise ShopifyError(
+                "missing Shopify auth: set SHOPIFY_ADMIN_API_TOKEN or "
+                "SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET"
+            )
 
     @property
     def base_url(self) -> str:
         return f"https://{self.domain}/admin/api/{self.api_version}"
 
+    @property
+    def oauth_url(self) -> str:
+        return f"https://{self.domain}/admin/oauth/access_token"
+
+    def _access_token(self) -> str:
+        if self.token:
+            return self.token
+
+        now = time.time()
+        if self._cached_token and now < (self._token_expires_at - TOKEN_EXPIRY_SKEW_SECONDS):
+            return self._cached_token
+
+        return self._fetch_client_credentials_token(now)
+
+    def _fetch_client_credentials_token(self, now: float) -> str:
+        if not self.client_id or not self.client_secret:
+            raise ShopifyError(
+                "missing Shopify client credentials: set SHOPIFY_CLIENT_ID and "
+                "SHOPIFY_CLIENT_SECRET"
+            )
+
+        try:
+            resp = requests.request(
+                "POST",
+                self.oauth_url,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                json={
+                    "grant_type": "client_credentials",
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                },
+                timeout=self.timeout,
+            )
+        except requests.RequestException as exc:
+            raise ShopifyError(f"POST /admin/oauth/access_token network error: {exc}") from exc
+
+        if resp.status_code >= 400:
+            raise ShopifyError(
+                f"POST /admin/oauth/access_token failed {resp.status_code}: {resp.text[:300]}"
+            )
+
+        try:
+            payload = resp.json()
+        except ValueError as exc:
+            raise ShopifyError("POST /admin/oauth/access_token returned invalid JSON") from exc
+
+        access_token = payload.get("access_token")
+        if not access_token:
+            raise ShopifyError("POST /admin/oauth/access_token returned no access_token")
+
+        expires_in = payload.get("expires_in") or DEFAULT_CLIENT_CREDENTIALS_EXPIRES_IN
+        try:
+            expires_in_seconds = int(expires_in)
+        except (TypeError, ValueError):
+            expires_in_seconds = DEFAULT_CLIENT_CREDENTIALS_EXPIRES_IN
+
+        self._cached_token = str(access_token)
+        self._token_expires_at = now + max(1, expires_in_seconds)
+        return self._cached_token
+
     def _headers(self) -> dict:
         return {
-            "X-Shopify-Access-Token": self.token,
+            "X-Shopify-Access-Token": self._access_token(),
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
