@@ -37,6 +37,7 @@ class ShopifyAdminProvider(Protocol):
     def create_product(
         self, payload: dict, *, idempotency_key: str | None = None
     ) -> dict: ...
+    def delete_product(self, product_id: int) -> None: ...
     def find_product_by_handle(self, handle: str) -> dict | None: ...
 
 
@@ -228,6 +229,9 @@ class ShopifyRestProvider:
             }
         resp = self._request("POST", "/products.json", json_body=payload)
         return resp.json().get("product", {}) or {}
+
+    def delete_product(self, product_id: int) -> None:
+        self._request("DELETE", f"/products/{product_id}.json")
 
 
 def default_provider() -> ShopifyAdminProvider:

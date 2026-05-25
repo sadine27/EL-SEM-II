@@ -95,6 +95,16 @@ def test_create_product_reuses_existing_handle():
     assert req.call_count == 1  # no POST
 
 
+def test_delete_product_uses_delete_endpoint():
+    prov = _provider()
+    with patch("el.shopify.requests.request") as req:
+        req.return_value = FakeResp(200, {})
+        prov.delete_product(42)
+    method, url = req.call_args.args
+    assert method == "DELETE"
+    assert url.endswith("/products/42.json")
+
+
 def test_retry_on_429_then_success():
     prov = _provider(max_retries=3)
     with patch("el.shopify.requests.request") as req:
