@@ -1,14 +1,11 @@
 """SP4 — /api/runs: submit + status."""
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from el.logger import get_logger
 from el.web import run_service
 from el.web.deps import get_principal, get_settings
-
-log = get_logger(__name__)
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
@@ -22,7 +19,6 @@ class RunSubmitBody(BaseModel):
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
 def submit_run(
     body: RunSubmitBody,
-    background: BackgroundTasks,
     request: Request,
     principal: str = Depends(get_principal),
     settings=Depends(get_settings),
@@ -34,9 +30,7 @@ def submit_run(
         principal=principal,
         db_provider=settings.db_provider,
     )
-    request_id = row["id"]
-    background.add_task(_run_pipeline_safe, request_id, settings.db_provider)
-    return {"request_id": request_id, "status": row["status"]}
+    return {"request_id": row["id"], "status": row["status"]}
 
 
 @router.get("/{request_id}")
@@ -52,13 +46,3 @@ def get_run(
             detail={"code": "ERR_RUN_NOT_FOUND", "message": f"no such run {request_id}"},
         )
     return row
-
-
-def _run_pipeline_safe(request_id: str, db_provider) -> None:
-    """BackgroundTasks entry. Imports lazily so unrelated tests don't pull in
-    the full pipeline graph."""
-    try:
-        from el.pipeline import run_for_request
-        run_for_request(request_id, db_provider=db_provider)
-    except Exception:
-        log.exception("background pipeline run for %s crashed", request_id)
