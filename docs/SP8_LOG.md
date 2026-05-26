@@ -142,6 +142,16 @@ Once unblocked: re-run `curl -X POST https://<tunnel>/api/runs -H "Authorization
 
 `test` + `build` jobs run on every push to main. `deploy` job is skipped (not failed) when `HETZNER_SSH_HOST` is unset — safe for laptop-hosting mode.
 
+### Task E — Post-merge housekeeping (2026-05-26)
+
+| Item | Result |
+|------|--------|
+| Node.js 20 deprecation: added `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to `ci.yml` + `deploy.yml` | DONE — CI green on new SHA `682455d` |
+| `ci.yml` Python version bumped 3.10 → 3.12 to match Dockerfile | DONE |
+| `migrations/combined_apply_all.sql` created (SP1→SP3→SP4→SP6 in one paste) | DONE |
+| `.env.example` sections 16 (SP6 CRM) + 17 (SP8 worker) added; `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET` documented as Option B for SP5b | DONE |
+| `PHASE3_ROADMAP.md` Next action updated to reference combined migration script | DONE |
+
 ---
 
 ## Acceptance verification
