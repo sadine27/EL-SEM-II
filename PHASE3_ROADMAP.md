@@ -11,7 +11,7 @@ This is a **meta-document**. It does not design or specify any sub-project. Each
 
 ## Status snapshot
 
-_Last updated: 2026-05-26 (SP6 implemented on `claude/next-feature-implementation-0QYjJ`)._
+_Last updated: 2026-05-26 (SP6 squash-merged to main)._
 
 | SP | Title | Status | Notes |
 |---|---|---|---|
@@ -20,11 +20,11 @@ _Last updated: 2026-05-26 (SP6 implemented on `claude/next-feature-implementatio
 | SP3 | Vision + pgvector | ✅ merged to main | Squash-merged at `dc2d400`. Vertex multimodal embeddings + pgvector HNSW + find_similar helper. Bing Visual Search deferred. 488/488 tests green. **Pending:** apply migration + production smoke (verify Vertex spend ≤ $0.02). |
 | SP4 | FastAPI + RAG chat bot | ✅ merged to main | Squash-merged at `8c1b3da`. FastAPI app at `el/web/`, bearer auth, in-memory rate limit, RAG chat over SSE, HTMX shell pages. Supabase Auth magic-link + Telegram WebApp + Redis deferred to SP6/SP8. 555/555 tests green. Iteration log at `docs/SP4_LOG.md`. **Pending:** apply migration + browser smoke per SP4_LOG runbook. |
 | SP5 | Outbound (email, Shopify auto-store, notify) | ✅ merged to main | Squash-merged at `6eac26c`. Bundles SP5a (Gmail SMTP digest + per-product) and SP5b (Shopify Admin API theme + product upload); `notify_business` delivers live store URL. 602/602 tests green. Design specs at `docs/superpowers/specs/2026-05-22-sp5a-outbound-email-design.md` and `2026-05-22-sp5b-shopify-auto-store-design.md`. **Pending:** configure Gmail app password + Shopify dev-store creds in prod `.env`; live smoke of email + theme + product upload. |
-| SP6 | CRM minimal | ✅ implemented | Design spec at `docs/superpowers/specs/2026-05-26-sp6-crm-design.md`. Supabase tables `private.suppliers` + `private.disputes` + `private.niche_performance`; `el/crm.py` data layer; `record_niche_performance` pipeline node; `/crm` HTMX dashboard + `/api/crm/*` routes extending SP4. 675/675 tests green. **Pending:** apply migration `migrations/sp6/001_crm_tables.sql` in production Supabase + merge to main. |
+| SP6 | CRM minimal | ✅ merged to main | Squash-merged at `e3019ad`. Supabase tables `private.suppliers` + `private.disputes` + `private.niche_performance`; `el/crm.py` data layer; `record_niche_performance` pipeline node; `/crm` HTMX dashboard + `/api/crm/*` routes extending SP4. 661/661 tests green. Design spec at `docs/superpowers/specs/2026-05-26-sp6-crm-design.md`. **Pending:** apply migration `migrations/sp6/001_crm_tables.sql` in production Supabase; browser smoke of `/crm` dashboard. |
 | SP8 | Docker + Hetzner deploy | ⬜ not started | Design pending. Depends on all user-facing SPs. |
 | SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events. Sequenced last. |
 
-**Next action:** Merge SP6 to main (squash), apply migration in production Supabase, then start SP8 (Docker + Hetzner deploy). Pending human-side: SP1–SP5 production smokes (unchanged from previous entry); SP6 production smoke = apply `migrations/sp6/001_crm_tables.sql` and verify `/crm` dashboard loads.
+**Next action:** Start SP8 (Docker + Hetzner deploy). Pending human-side: SP1–SP5 production smokes (unchanged); SP6 production smoke = apply `migrations/sp6/001_crm_tables.sql` in production Supabase + verify `/crm` dashboard loads.
 
 **Step 0 status:** ✅ complete (2026-05-21). Paper work parked on `paper/phase2-revision` at commit `de79243`. `EL report content.docx` deleted (was an old Word version of the paper).
 
