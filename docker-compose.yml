@@ -1,0 +1,45 @@
+services:
+  api:
+    image: ghcr.io/${GHCR_OWNER}/el:${EL_IMAGE_TAG}
+    env_file: /etc/el/.env
+    volumes:
+      - el-data:/app/data
+    command: ["uvicorn", "el.web:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  worker:
+    image: ghcr.io/${GHCR_OWNER}/el:${EL_IMAGE_TAG}
+    env_file: /etc/el/.env
+    volumes:
+      - el-data:/app/data
+    command: ["python", "-m", "el.worker"]
+    restart: unless-stopped
+    stop_grace_period: 86400s
+    deploy:
+      replicas: 1
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  el-data: {}
+  caddy-data: {}
+  caddy-config: {}
