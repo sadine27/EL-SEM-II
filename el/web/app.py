@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from el.web.errors import register_error_handlers
 from el.web.rate_limit import TokenBucket
 from el.web.routes.chat import router as chat_router
+from el.web.routes.crm import router as crm_router
 from el.web.routes.health import router as health_router
 from el.web.routes.pages import router as pages_router
 from el.web.routes.runs import router as runs_router
@@ -60,6 +61,7 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(runs_router)
     app.include_router(chat_router)
+    app.include_router(crm_router)
     app.include_router(pages_router)
 
     return app

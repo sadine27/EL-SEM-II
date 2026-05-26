@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}CRM — EL{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-semibold mb-6">CRM Dashboard</h1>
+
+<!-- Niche Performance -->
+<section class="mb-10">
+  <h2 class="text-lg font-medium mb-3">Niche Performance</h2>
+  <div id="niche-performance-table"
+       hx-get="/api/crm/niche-performance"
+       hx-trigger="load"
+       hx-headers='{"Authorization": "Bearer " + (sessionStorage.getItem("el_bearer") || "")}'
+       hx-swap="innerHTML">
+    <p class="text-slate-400 text-sm">Loading…</p>
+  </div>
+</section>
+
+<!-- Suppliers -->
+<section class="mb-10">
+  <h2 class="text-lg font-medium mb-3">Suppliers</h2>
+  <div id="suppliers-table"
+       hx-get="/api/crm/suppliers"
+       hx-trigger="load"
+       hx-headers='{"Authorization": "Bearer " + (sessionStorage.getItem("el_bearer") || "")}'
+       hx-swap="innerHTML">
+    <p class="text-slate-400 text-sm">Loading…</p>
+  </div>
+</section>
+
+<!-- Disputes -->
+<section class="mb-10">
+  <h2 class="text-lg font-medium mb-3">Disputes</h2>
+  <div id="disputes-table"
+       hx-get="/api/crm/disputes"
+       hx-trigger="load"
+       hx-headers='{"Authorization": "Bearer " + (sessionStorage.getItem("el_bearer") || "")}'
+       hx-swap="innerHTML">
+    <p class="text-slate-400 text-sm">Loading…</p>
+  </div>
+</section>
+
+<script>
+  // Inject auth token into htmx requests for crm tables after bearer is set.
+  document.addEventListener("DOMContentLoaded", function () {
+    function authHeader() {
+      return { "Authorization": "Bearer " + (sessionStorage.getItem("el_bearer") || "") };
+    }
+    document.body.addEventListener("htmx:configRequest", function (e) {
+      var hdr = authHeader();
+      e.detail.headers["Authorization"] = hdr["Authorization"];
+    });
+
+    // Render helpers — called by htmx:afterSwap on JSON responses.
+    function renderTable(containerId, rows, cols) {
+      var el = document.getElementById(containerId);
+      if (!el) return;
+      if (!rows || rows.length === 0) {
+        el.innerHTML = '<p class="text-slate-400 text-sm">No data yet.</p>';
+        return;
+      }
+      var html = '<div class="overflow-x-auto"><table class="min-w-full text-sm border border-slate-200 rounded">'
+        + '<thead class="bg-slate-100"><tr>'
+        + cols.map(function(c){ return '<th class="px-3 py-2 text-left font-medium text-slate-600">' + c + '</th>'; }).join('')
+        + '</tr></thead><tbody>';
+      rows.forEach(function(row, i) {
+        html += '<tr class="' + (i % 2 === 0 ? 'bg-white' : 'bg-slate-50') + '">';
+        cols.forEach(function(c) {
+          var val = row[c.toLowerCase().replace(/ /g,'_')] ?? row[c] ?? '';
+          html += '<td class="px-3 py-2 text-slate-700">' + String(val) + '</td>';
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    // Fetch and render each section.
+    var token = sessionStorage.getItem("el_bearer") || "";
+
+    function fetchAndRender(url, containerId, cols) {
+      fetch(url, { headers: { "Authorization": "Bearer " + token } })
+        .then(function(r) { return r.json(); })
+        .then(function(data) { renderTable(containerId, data, cols); })
+        .catch(function() {
+          var el = document.getElementById(containerId);
+          if (el) el.innerHTML = '<p class="text-red-500 text-sm">Failed to load.</p>';
+        });
+    }
+
+    fetchAndRender("/api/crm/niche-performance", "niche-performance-table",
+      ["niche", "run_count", "approval_count", "rejection_count", "approval_rate", "avg_bcc_score", "last_run_at"]);
+    fetchAndRender("/api/crm/suppliers", "suppliers-table",
+      ["supplier_id", "name", "cj_ref", "reliability_score", "last_dispute_at"]);
+    fetchAndRender("/api/crm/disputes", "disputes-table",
+      ["dispute_id", "product_key", "supplier_ref", "status", "opened_at", "resolution"]);
+  });
+</script>
+{% endblock %}

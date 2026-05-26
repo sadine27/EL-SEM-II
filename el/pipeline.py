@@ -34,6 +34,7 @@ from el.nodes import (
     prepare_json_file,
     prepare_sheet_rows,
     prepare_telegram_card,
+    record_niche_performance,
     score_rank,
     send_hil_telegram_photo,
     send_hil_telegram_text_fallback,
@@ -202,6 +203,9 @@ def run(initial_ctx: dict | None = None) -> dict:
             telegram_alert.run(ctx)
     elif ctx.get("formatted_error"):
         log.warning("TELEGRAM_HIL_BOT_TOKEN not set - skipping notify_business + telegram_alert")
+
+    # SP6: record per-niche CRM metrics at end of run (fail-soft, gated by Supabase env).
+    record_niche_performance.run(ctx)
 
     log.info("EL pipeline run end (ctx keys: %s)", list(ctx.keys()))
     return ctx

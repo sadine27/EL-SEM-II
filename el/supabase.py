@@ -16,6 +16,11 @@ PRODUCT_EMBEDDINGS_CONFLICT_COLUMNS = ("product_key",)
 MATCH_PRODUCT_EMBEDDINGS_FN = "match_product_embeddings"
 RUN_REQUESTS_TABLE = "run_requests"
 RUN_REQUESTS_SCHEMA = "private"
+
+CRM_SCHEMA = "private"
+CRM_SUPPLIERS_TABLE = "suppliers"
+CRM_DISPUTES_TABLE = "disputes"
+CRM_NICHE_PERFORMANCE_TABLE = "niche_performance"
 HIL_REVIEWS_CONFLICT_COLUMNS = (
     "workflow_run_id",
     "source_provider",
