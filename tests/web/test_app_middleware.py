@@ -1,12 +1,22 @@
 """SP4 — middleware behavior (rate limit, error envelope)."""
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
 from el import embeddings
 from el.web.app import create_app
 from el.web.settings import Settings
 from tests.web.conftest import FakeDB, _fake_llm_stream
+
+_VALID_SA_JSON = json.dumps({
+    "type": "service_account",
+    "project_id": "p",
+    "private_key": "x",
+    "client_email": "x@p.iam.gserviceaccount.com",
+    "token_uri": "https://oauth2.googleapis.com/token",
+})
 
 
 def _build_client(*, rate_limit_per_minute: int, raise_server_exceptions: bool = True) -> TestClient:
@@ -17,6 +27,7 @@ def _build_client(*, rate_limit_per_minute: int, raise_server_exceptions: bool =
         embedding_provider=embeddings.FakeEmbeddingProvider(),
         db_provider=FakeDB(),
         llm_stream=_fake_llm_stream,
+        google_service_account_json=_VALID_SA_JSON,
         enabled=True,
     )
     app = create_app(settings=settings)

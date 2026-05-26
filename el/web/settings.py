@@ -32,6 +32,7 @@ class Settings:
     db_provider: Any | None = None
     llm_stream: Callable[[str], Any] | None = None
     enabled: bool = True
+    google_service_account_json: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -47,4 +48,5 @@ class Settings:
             chat_top_k=int(os.environ.get("WEB_CHAT_TOP_K", "5")),
             llm_model=os.environ.get("WEB_LLM_MODEL", "gemini-2.0-flash"),
             enabled=_truthy(os.environ.get("EL_WEB_ENABLED"), default=False),
+            google_service_account_json=os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON"),
         )

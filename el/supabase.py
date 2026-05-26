@@ -35,6 +35,16 @@ class SupabaseRestProvider:
         )
         self.timeout = timeout
 
+    def ping(self) -> None:
+        """Healthcheck: GET against the REST root with a 2s timeout."""
+        r = requests.get(
+            urljoin(self.url, "rest/v1/"),
+            headers={"apikey": self.key, "Authorization": f"Bearer {self.key}"},
+            timeout=2,
+        )
+        if r.status_code >= 500:
+            raise RuntimeError(f"supabase /rest/v1 returned {r.status_code}")
+
     def upsert_rows(
         self,
         *,
