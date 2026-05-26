@@ -11,20 +11,20 @@ This is a **meta-document**. It does not design or specify any sub-project. Each
 
 ## Status snapshot
 
-_Last updated: 2026-05-26 (SP8 squash-merged to main)._
+_Last updated: 2026-05-26 (SP8 Docker verification complete; laptop hosting confirmed)._
 
 | SP | Title | Status | Notes |
 |---|---|---|---|
-| SP1 | Telemetry Foundation | ✅ merged to main | All 10 plan tasks merged via fast-forward (see Roadmap revisions §1). 433/433 tests green, 92% overall coverage. Iteration log at `docs/SP1_LOG.md`. **Pending:** human-driven production smoke run (see SP1_LOG runbook §4). |
+| SP1 | Telemetry Foundation | ✅ merged to main | All 10 plan tasks merged via fast-forward (see Roadmap revisions §1). 433/433 tests green, 92% overall coverage. Iteration log at `docs/SP1_LOG.md`. **Pending:** apply migration + human-driven production smoke run (see SP1_LOG runbook §4). |
 | SP2 | Source Expansion | ✅ merged to main | Squash-merged at `cbb6b9a`. Scoped to 2 sources (YouTube refactor + Shopify competitor); 4 sources deferred per SP2 design spec §1. 463/463 tests green. Iteration log at `docs/SP2_LOG.md`. **Pending:** optional production smoke if Shopify-competitor is enabled. |
-| SP3 | Vision + pgvector | ✅ merged to main | Squash-merged at `dc2d400`. Vertex multimodal embeddings + pgvector HNSW + find_similar helper. Bing Visual Search deferred. 488/488 tests green. **Pending:** apply migration + production smoke (verify Vertex spend ≤ $0.02). |
-| SP4 | FastAPI + RAG chat bot | ✅ merged to main | Squash-merged at `8c1b3da`. FastAPI app at `el/web/`, bearer auth, in-memory rate limit, RAG chat over SSE, HTMX shell pages. Supabase Auth magic-link + Telegram WebApp + Redis deferred to SP6/SP8. 555/555 tests green. Iteration log at `docs/SP4_LOG.md`. **Pending:** apply migration + browser smoke per SP4_LOG runbook. |
-| SP5 | Outbound (email, Shopify auto-store, notify) | ✅ merged to main | Squash-merged at `6eac26c`. Bundles SP5a (Gmail SMTP digest + per-product) and SP5b (Shopify Admin API theme + product upload); `notify_business` delivers live store URL. 602/602 tests green. Design specs at `docs/superpowers/specs/2026-05-22-sp5a-outbound-email-design.md` and `2026-05-22-sp5b-shopify-auto-store-design.md`. **Pending:** configure Gmail app password + Shopify dev-store creds in prod `.env`; live smoke of email + theme + product upload. |
-| SP6 | CRM minimal | ✅ merged to main | Squash-merged at `e3019ad`. Supabase tables `private.suppliers` + `private.disputes` + `private.niche_performance`; `el/crm.py` data layer; `record_niche_performance` pipeline node; `/crm` HTMX dashboard + `/api/crm/*` routes extending SP4. 661/661 tests green. Design spec at `docs/superpowers/specs/2026-05-26-sp6-crm-design.md`. **Pending:** apply migration `migrations/sp6/001_crm_tables.sql` in production Supabase; browser smoke of `/crm` dashboard. |
-| SP8 | Docker + Hetzner deploy | ✅ merged to main | Squash-merged at `2cbeb73`. Multi-stage Dockerfile + entrypoint env validation, docker-compose (api + worker + caddy) with healthcheck-gated `depends_on`, Caddyfile internal TLS, `el/worker.py` poll loop + SIGTERM + claim-based dequeue race guard, `/healthz` checks db + vertex_creds, GitHub Actions deploy workflow (test → build → GHCR → SSH → healthz-gated rollback), Hetzner CX22 bootstrap script (`PIN_SHA` default pinned to merge SHA), deploy runbook, opt-in compose smoke test, requirements split into runtime + dev. 674/674 tests green (+1 opt-in compose smoke skipped). Iteration log at `docs/SP8_LOG.md`. **Pending:** Docker-daemon verification on a host with Docker (image build < 500 MB, opt-in compose smoke via `DOCKER_AVAILABLE=1 pytest tests/integration -v`, cold-start < 10s); post-merge Hetzner provisioning + production smoke (per `docs/runbooks/deploy.md`). |
-| SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events. Sequenced last. |
+| SP3 | Vision + pgvector | ✅ merged to main | Squash-merged at `dc2d400`. Vertex multimodal embeddings + pgvector HNSW + find_similar helper. Bing Visual Search deferred. 488/488 tests green. **Pending:** apply pgvector migration in Supabase + production smoke (verify Vertex spend ≤ $0.02). |
+| SP4 | FastAPI + RAG chat bot | ✅ merged to main | Squash-merged at `8c1b3da`. FastAPI app at `el/web/`, bearer auth, in-memory rate limit, RAG chat over SSE, HTMX shell pages. Supabase Auth magic-link + Telegram WebApp + Redis deferred to SP6/SP8. 555/555 tests green. Iteration log at `docs/SP4_LOG.md`. **Pending:** apply `migrations/sp4/001_run_requests.sql` in Supabase + browser smoke. |
+| SP5 | Outbound (email, Shopify auto-store, notify) | ✅ merged to main | Squash-merged at `6eac26c`. Bundles SP5a (Gmail SMTP digest + per-product) and SP5b (Shopify Admin API theme + product upload); `notify_business` delivers live store URL. 602/602 tests green. **Pending:** configure Gmail app password + Shopify dev-store creds in prod `.env`; live smoke of email + theme + product upload. |
+| SP6 | CRM minimal | ✅ merged to main | Squash-merged at `e3019ad`. Supabase tables `private.suppliers` + `private.disputes` + `private.niche_performance`; `el/crm.py` data layer; `record_niche_performance` pipeline node; `/crm` HTMX dashboard + `/api/crm/*` routes extending SP4. 661/661 tests green. **Pending:** apply `migrations/sp6/001_crm_tables.sql` in Supabase; browser smoke of `/crm` dashboard. |
+| SP8 | Docker + Laptop deploy | ✅ merged + verified | Squash-merged at `2cbeb73`. Docker local verification ✅ (image < 500 MB, cold-start < 10s, compose smoke passes). Deployed on laptop via Docker Compose + Cloudflare Quick Tunnel. `/healthz` green with real Supabase + Google SA. **Pending:** `POST /api/runs` smoke (blocked on SP4 migration applied in Supabase); end-to-end niche→HIL→Shopify smoke. |
+| SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events in `private.hil_logging_events`. Sequenced last. |
 
-**Next action:** SP8 post-merge ops: (a) Docker-daemon verification on a workstation with Docker (build image, confirm < 500 MB, opt-in compose smoke via `DOCKER_AVAILABLE=1 pytest tests/integration -v`, cold-start < 10s); (b) provision a Hetzner CX22 per `docs/runbooks/deploy.md` (bootstrap script's `PIN_SHA` default is now pinned to `2cbeb73`); (c) live healthz smoke against the deployed box. Then SP7 (paper pipeline) once ≥100 HIL events have accrued. Pending human-side: SP1–SP5 production smokes (per each SP_LOG and the SP5 design specs); SP6 production smoke = apply `migrations/sp6/001_crm_tables.sql` in production Supabase + verify `/crm` dashboard loads. SP1 production smoke per `docs/SP1_LOG.md` §Deploy runbook step 4 (Supabase access required); SP2 production smoke per `docs/SP2_LOG.md` §Deploy runbook step 4 (optional — only if enabling Shopify-competitor); SP3 production smoke per `docs/SP3_LOG.md` (apply pgvector migration + verify Vertex spend); SP4 production smoke per `docs/SP4_LOG.md` (apply run_requests migration + boot uvicorn + browser smoke); SP5 production smoke per the two SP5 design specs (Gmail app password + Shopify dev store + live send/upload run).
+**Next action:** Apply pending Supabase migrations in SQL Editor (SP1 → SP3 → SP4 → SP6 in order; each is idempotent). Expose `private` schema in Supabase API settings. Then re-run SP8 Task D2 smoke (`POST /api/runs`). Then check `private.hil_logging_events` row count — SP7 unblocks once ≥100 events accrued. Pending human-side: SP5 production smoke (Gmail app password + Shopify dev store + live send/upload run).
 
 **Step 0 status:** ✅ complete (2026-05-21). Paper work parked on `paper/phase2-revision` at commit `de79243`. `EL report content.docx` deleted (was an old Word version of the paper).
 
@@ -96,16 +96,17 @@ SP1 ─► SP2 ─► SP3 ─► SP4 ─► SP5 ─► SP6 ─► SP8 ─► SP7
 - **Shipped:** `el/email.py` (Gmail SMTP w/ retry + STARTTLS), `el/nodes/email_digest.py`, `el/nodes/email_product_detail.py`, `el/shopify.py` (Admin API client w/ idempotency keys + retry), `el/nodes/generate_shopify_theme.py` (Vertex Gemini structured-output), `el/nodes/upload_shopify_theme.py`, `el/nodes/upload_shopify_products.py`, `el/nodes/notify_business.py` (Telegram operator ping w/ live store URL). 47 new tests; 602/602 total green.
 - **Deferred:** none (full SP5 scope delivered).
 
-### SP6 — CRM minimal ⬜
+### SP6 — CRM minimal ✅
 
-- **Branch:** `feat/sp6-crm`
-- **Master-spec deliverables:** decision spec for storage choice (Supabase + dashboard vs external), `private.suppliers`, `private.disputes`, `private.niche_performance`, pipeline hook, `/crm` route extension of SP4.
-- **Credentials to confirm at SP-start:** TBD (depends on chosen storage).
-- **Estimated effort:** 1–2 days spec + 3–5 days build.
+- **Merged:** `e3019ad` (squash) on 2026-05-26.
+- **Design:** `docs/superpowers/specs/2026-05-26-sp6-crm-design.md` ✅
+- **Iteration log:** `docs/SP6_LOG.md` ✅
+- **Shipped:** `private.suppliers`, `private.disputes`, `private.niche_performance` tables; `el/crm.py` data layer; `record_niche_performance` pipeline node; `/crm` HTMX dashboard + `/api/crm/*` routes.
+- **Pending:** apply `migrations/sp6/001_crm_tables.sql` in Supabase; verify `/crm` dashboard loads on deployed stack.
 
-### SP8 — Docker + Hetzner deploy 🟡
+### SP8 — Docker + Laptop deploy ✅
 
-- **Branch:** `claude/task-8-commit-review-iIbaW` (code-complete, awaiting merge)
+- **Merged:** `2cbeb73` (squash) on 2026-05-26. Verification fixes in PR #6 (branch `sp8-docker-local-verification-fixes`).
 - **Design:** `docs/superpowers/specs/2026-05-25-sp8-docker-deploy-design.md` ✅
 - **Plan:** `docs/superpowers/plans/2026-05-25-sp8-docker-deploy.md` ✅
 - **Iteration log:** `docs/SP8_LOG.md` ✅
