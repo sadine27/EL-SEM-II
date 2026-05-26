@@ -71,8 +71,8 @@ jobs:
             cd /etc/el
             cp compose.env compose.env.prev
             cat > compose.env.new <<EOF
-            EL_IMAGE_TAG=${{ needs.build.outputs.image_tag }}
-            GHCR_OWNER=${{ vars.GHCR_OWNER }}
+            EL_IMAGE=ghcr.io/${{ vars.GHCR_OWNER }}/el:${{ needs.build.outputs.image_tag }}
+            EL_ENV_FILE=.env
             EOF
             mv compose.env.new compose.env
             docker compose --env-file compose.env pull

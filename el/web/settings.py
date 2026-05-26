@@ -9,11 +9,19 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from el.supabase import SupabaseRestProvider
+
 
 def _truthy(value: str | None, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _db_provider_from_env() -> Any | None:
+    if not os.environ.get("SUPABASE_URL"):
+        return None
+    return SupabaseRestProvider()
 
 
 @dataclass
@@ -48,5 +56,6 @@ class Settings:
             chat_top_k=int(os.environ.get("WEB_CHAT_TOP_K", "5")),
             llm_model=os.environ.get("WEB_LLM_MODEL", "gemini-2.0-flash"),
             enabled=_truthy(os.environ.get("EL_WEB_ENABLED"), default=False),
+            db_provider=_db_provider_from_env(),
             google_service_account_json=os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON"),
         )
