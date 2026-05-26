@@ -24,7 +24,7 @@ _Last updated: 2026-05-26 (SP8 Docker verification complete; laptop hosting conf
 | SP8 | Docker + Laptop deploy | ✅ merged + verified | Squash-merged at `2cbeb73`. Docker local verification ✅ (image < 500 MB, cold-start < 10s, compose smoke passes). Deployed on laptop via Docker Compose + Cloudflare Quick Tunnel. `/healthz` green with real Supabase + Google SA. **Pending:** `POST /api/runs` smoke (blocked on SP4 migration applied in Supabase); end-to-end niche→HIL→Shopify smoke. |
 | SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events in `private.hil_logging_events`. Sequenced last. |
 
-**Next action:** Apply pending Supabase migrations in SQL Editor (SP1 → SP3 → SP4 → SP6 in order; each is idempotent). Expose `private` schema in Supabase API settings. Then re-run SP8 Task D2 smoke (`POST /api/runs`). Then check `private.hil_logging_events` row count — SP7 unblocks once ≥100 events accrued. Pending human-side: SP5 production smoke (Gmail app password + Shopify dev store + live send/upload run).
+**Next action:** Apply `migrations/combined_apply_all.sql` in Supabase SQL Editor (one paste, all SP1→SP3→SP4→SP6 migrations, idempotent). Then expose `private` schema in Supabase API Settings → Exposed schemas. Then re-run SP8 Task D2 smoke (`POST /api/runs`). Then check `private.hil_logging_events` row count — SP7 unblocks once ≥100 events accrued. Pending human-side: SP5 production smoke (Gmail app password + Shopify dev store + live send/upload run).
 
 **Step 0 status:** ✅ complete (2026-05-21). Paper work parked on `paper/phase2-revision` at commit `de79243`. `EL report content.docx` deleted (was an old Word version of the paper).
 
