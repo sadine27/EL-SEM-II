@@ -105,6 +105,45 @@ docker compose --env-file compose.env up -d
 Per-feature kill-switch: SP5/SP6 env flags (e.g. `EL_SHOPIFY_AUTO_STORE_ENABLED`)
 remain untouched by SP8 and continue to work as documented.
 
+## Iteration outcomes (post-merge verification)
+
+**Date:** 2026-05-26  
+**Environment:** Laptop (Ryzen 5 7235HS, 24 GB RAM, Windows 11) with Docker Desktop + Cloudflare Quick Tunnel  
+**Deployment strategy:** Laptop-hosted Docker Compose (replaces Hetzner CX22 for zero-cost local hosting)
+
+### Task A — Docker local verification
+
+| Check | Result |
+|-------|--------|
+| `docker build -t el:local .` | PASS — image builds clean |
+| Image size | PASS — under 500 MB |
+| `DOCKER_AVAILABLE=1 pytest tests/integration/test_sp8_compose_smoke.py -v` | PASS |
+| Cold-start `https://localhost/healthz` | PASS — 200 within 10s |
+| Real env loaded (SUPABASE_URL, WEB_SECRET_KEY, GOOGLE_SERVICE_ACCOUNT_JSON) | PASS |
+| `/healthz` with live credentials: `{"ok":true,"checks":{"db":"ok","vertex_creds":"ok"}}` | PASS |
+
+### Task D1 — Public /healthz via Cloudflare Quick Tunnel
+
+Public URL: `https://yrs-baghdad-indie-coaches.trycloudflare.com` (ephemeral — regenerates on each tunnel restart)
+
+```json
+{"ok":true,"version":"unknown","checks":{"db":"ok","vertex_creds":"ok"}}
+```
+
+PASS — real Supabase + real Google SA both verified over public HTTPS with no port forwarding or VPS.
+
+### Task D2 — POST /api/runs smoke
+
+BLOCKED — `private.run_requests` table not yet created in Supabase (SP4 migration not applied).  
+Fix: apply `migrations/sp4/001_run_requests.sql` in Supabase SQL Editor and expose `private` schema in API settings.  
+Once unblocked: re-run `curl -X POST https://<tunnel>/api/runs -H "Authorization: Bearer <WEB_SECRET_KEY>" -d '{"niche":"smoke-test"}'`.
+
+### Deploy workflow
+
+`test` + `build` jobs run on every push to main. `deploy` job is skipped (not failed) when `HETZNER_SSH_HOST` is unset — safe for laptop-hosting mode.
+
+---
+
 ## Acceptance verification
 
 - [x] Multi-stage Dockerfile, python:3.12-slim, non-root `appuser`, no `ADD`, every `apt-get install` uses `--no-install-recommends` (enforced by `tests/test_dockerfile_lint.py`).
@@ -114,9 +153,9 @@ remain untouched by SP8 and continue to work as documented.
 - [x] Worker truncates error messages to ≤2000 chars; SIGTERM/SIGINT cleanly exits `run_loop` within one tick.
 - [x] `docker-compose.yml` healthcheck-gates `caddy` on `api: service_healthy`; worker has `stop_grace_period: 86400s` to protect long pipeline runs.
 - [x] 652/652 unit + web suite green; +1 opt-in compose smoke skipped without `DOCKER_AVAILABLE=1`.
-- [ ] Docker-daemon verification (image builds, image-size < 500 MB, cold-start < 10s, `DOCKER_AVAILABLE=1 pytest tests/integration -v` passes). *(deferred — no daemon in current sandbox.)*
-- [ ] Substitute `PIN_SHA` placeholders in `scripts/deploy/hetzner_bootstrap.sh` and `docs/runbooks/deploy.md` with the squash-merge SHA at merge time.
-- [ ] Hetzner CX22 provisioning + first push-to-main deploy + end-to-end smoke (niche → Telegram HIL → Shopify dev store). *(post-merge.)*
+- [x] Docker-daemon verification (image builds, image-size < 500 MB, cold-start < 10s, `DOCKER_AVAILABLE=1 pytest tests/integration -v` passes). *(verified 2026-05-26 on local laptop.)*
+- [x] Substitute `PIN_SHA` placeholders in `scripts/deploy/hetzner_bootstrap.sh` and `docs/runbooks/deploy.md` with the squash-merge SHA at merge time. *(done in commit 45f5c20.)*
+- [ ] End-to-end smoke (niche → Telegram HIL → Shopify dev store). *(blocked on `private.run_requests` migration — see Task D2 above.)*
 - [ ] Bad-commit rollback test: intentional syntax error in `el/web/app.py`, push, confirm healthz fails, rollback restores prior `:sha-<short>`, workflow exits non-zero. *(post-merge.)*
 
 ## Surprises / decisions deferred

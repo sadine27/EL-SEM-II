@@ -23,13 +23,23 @@ create table if not exists private.run_requests (
     budget_usd        numeric(10, 2),
     status            text not null default 'queued'
                       check (status in ('queued', 'running', 'done', 'error')),
+    claimed_by        text,
     pipeline_run_id   uuid,
     error_message     text,
     started_at        timestamptz,
     finished_at       timestamptz
 );
 
+-- Idempotent column backfill if table already existed without claimed_by.
+alter table private.run_requests
+    add column if not exists claimed_by text;
 
 -- Index supports the dashboard query "most recent runs by status".
 create index if not exists run_requests_status_idx
     on private.run_requests (status, submitted_at desc);
+
+-- Grant service_role access so PostgREST can reach this schema.
+grant usage on schema private to service_role;
+grant all on all tables in schema private to service_role;
+alter default privileges in schema private
+    grant all on tables to service_role;

@@ -58,6 +58,7 @@ jobs:
 
   deploy:
     needs: build
+    if: vars.HETZNER_SSH_HOST != ''
     runs-on: ubuntu-latest
     steps:
       - name: Push new tag to host and roll forward
