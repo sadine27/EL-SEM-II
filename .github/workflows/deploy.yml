@@ -55,3 +55,74 @@ jobs:
             ghcr.io/${{ vars.GHCR_OWNER }}/el:${{ steps.tag.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Push new tag to host and roll forward
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ vars.HETZNER_SSH_HOST }}
+          username: ${{ secrets.HETZNER_SSH_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /etc/el
+            cp compose.env compose.env.prev
+            cat > compose.env.new <<EOF
+            EL_IMAGE_TAG=${{ needs.build.outputs.image_tag }}
+            GHCR_OWNER=${{ vars.GHCR_OWNER }}
+            EOF
+            mv compose.env.new compose.env
+            docker compose --env-file compose.env pull
+            docker compose --env-file compose.env up -d
+      - name: Poll healthz (60s ceiling)
+        id: healthz
+        shell: bash
+        run: |
+          set -u
+          for i in $(seq 1 12); do
+            if curl -fsS -k --max-time 5 "https://${{ vars.HETZNER_SSH_HOST }}/healthz" \
+                 | tee /tmp/healthz.json \
+                 | python -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('ok') else 1)"; then
+              echo "healthz green on attempt $i"
+              exit 0
+            fi
+            echo "attempt $i: not yet"
+            sleep 5
+          done
+          echo "::error::healthz never returned ok=true within 60s"
+          exit 1
+      - name: Re-tag image as :latest (only when healthz green)
+        if: success()
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ vars.GHCR_OWNER }}/el:latest
+          cache-from: type=gha
+      - name: Rollback on failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ vars.HETZNER_SSH_HOST }}
+          username: ${{ secrets.HETZNER_SSH_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /etc/el
+            if [ -s compose.env.prev ]; then
+              mv compose.env.prev compose.env
+              docker compose --env-file compose.env pull
+              docker compose --env-file compose.env up -d
+              echo "rolled back to previous tag"
+            else
+              echo "no compose.env.prev — cannot rollback"
+              exit 1
+            fi
+      - name: Fail loudly if rollback fired
+        if: failure()
+        run: |
+          echo "::error::Deploy failed; rollback executed. Investigate the new tag."
+          exit 1
