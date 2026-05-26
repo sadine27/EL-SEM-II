@@ -11,7 +11,7 @@ This is a **meta-document**. It does not design or specify any sub-project. Each
 
 ## Status snapshot
 
-_Last updated: 2026-05-25 (SP5 merged to main)._
+_Last updated: 2026-05-26 (SP8 code-complete on `claude/task-8-commit-review-iIbaW`)._
 
 | SP | Title | Status | Notes |
 |---|---|---|---|
@@ -21,10 +21,10 @@ _Last updated: 2026-05-25 (SP5 merged to main)._
 | SP4 | FastAPI + RAG chat bot | ✅ merged to main | Squash-merged at `8c1b3da`. FastAPI app at `el/web/`, bearer auth, in-memory rate limit, RAG chat over SSE, HTMX shell pages. Supabase Auth magic-link + Telegram WebApp + Redis deferred to SP6/SP8. 555/555 tests green. Iteration log at `docs/SP4_LOG.md`. **Pending:** apply migration + browser smoke per SP4_LOG runbook. |
 | SP5 | Outbound (email, Shopify auto-store, notify) | ✅ merged to main | Squash-merged at `6eac26c`. Bundles SP5a (Gmail SMTP digest + per-product) and SP5b (Shopify Admin API theme + product upload); `notify_business` delivers live store URL. 602/602 tests green. Design specs at `docs/superpowers/specs/2026-05-22-sp5a-outbound-email-design.md` and `2026-05-22-sp5b-shopify-auto-store-design.md`. **Pending:** configure Gmail app password + Shopify dev-store creds in prod `.env`; live smoke of email + theme + product upload. |
 | SP6 | CRM minimal | ⬜ not started | Design pending. Depends on SP1+SP4+SP5. |
-| SP8 | Docker + Hetzner deploy | ⬜ not started | Design pending. Depends on all user-facing SPs. |
+| SP8 | Docker + Hetzner deploy | 🟡 code-complete | 16 plan tasks committed on `claude/task-8-commit-review-iIbaW`. 652/652 tests green (+1 opt-in compose smoke skipped). Iteration log at `docs/SP8_LOG.md`. **Pending:** Docker-daemon verification (image build, image-size, cold-start, compose smoke), `PIN_SHA` substitution in `scripts/deploy/hetzner_bootstrap.sh` + runbook, squash-merge to `main`, post-merge Hetzner provisioning + production smoke (per `docs/runbooks/deploy.md`). |
 | SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events. Sequenced last. |
 
-**Next action:** Start SP6 (CRM minimal) brainstorming. Pending human-side: SP1 + SP2 + SP3 + SP4 + SP5 production smokes (per each SP_LOG and the SP5 design specs). SP1 production smoke per `docs/SP1_LOG.md` §Deploy runbook step 4 (Supabase access required); SP2 production smoke per `docs/SP2_LOG.md` §Deploy runbook step 4 (optional — only if enabling Shopify-competitor); SP3 production smoke per `docs/SP3_LOG.md` (apply pgvector migration + verify Vertex spend); SP4 production smoke per `docs/SP4_LOG.md` (apply run_requests migration + boot uvicorn + browser smoke); SP5 production smoke per the two SP5 design specs (Gmail app password + Shopify dev store + live send/upload run).
+**Next action:** Complete SP8 wrap-up before SP6 brainstorming. SP8 is code-complete but unmerged: (a) run Docker-daemon verification on a workstation that has Docker (build image, confirm < 500 MB, opt-in compose smoke via `DOCKER_AVAILABLE=1 pytest tests/integration -v`, cold-start < 10s); (b) substitute `PIN_SHA` placeholders in `scripts/deploy/hetzner_bootstrap.sh` and `docs/runbooks/deploy.md` with the squash-merge SHA at merge time; (c) squash-merge to `main` and provision a Hetzner CX22 per `docs/runbooks/deploy.md`. Then resume SP6 (CRM minimal) brainstorming. Pending human-side: SP1 + SP2 + SP3 + SP4 + SP5 production smokes (per each SP_LOG and the SP5 design specs). SP1 production smoke per `docs/SP1_LOG.md` §Deploy runbook step 4 (Supabase access required); SP2 production smoke per `docs/SP2_LOG.md` §Deploy runbook step 4 (optional — only if enabling Shopify-competitor); SP3 production smoke per `docs/SP3_LOG.md` (apply pgvector migration + verify Vertex spend); SP4 production smoke per `docs/SP4_LOG.md` (apply run_requests migration + boot uvicorn + browser smoke); SP5 production smoke per the two SP5 design specs (Gmail app password + Shopify dev store + live send/upload run).
 
 **Step 0 status:** ✅ complete (2026-05-21). Paper work parked on `paper/phase2-revision` at commit `de79243`. `EL report content.docx` deleted (was an old Word version of the paper).
 
@@ -103,12 +103,15 @@ SP1 ─► SP2 ─► SP3 ─► SP4 ─► SP5 ─► SP6 ─► SP8 ─► SP7
 - **Credentials to confirm at SP-start:** TBD (depends on chosen storage).
 - **Estimated effort:** 1–2 days spec + 3–5 days build.
 
-### SP8 — Docker + Hetzner deploy ⬜
+### SP8 — Docker + Hetzner deploy 🟡
 
-- **Branch:** `feat/sp8-deploy`
-- **Master-spec deliverables:** multi-stage `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `el/web/asgi.py`, `el/web/scheduler.py`, Hetzner bootstrap script, GitHub Actions deploy workflow, Sentry, Caddy, docs.
+- **Branch:** `claude/task-8-commit-review-iIbaW` (code-complete, awaiting merge)
+- **Design:** `docs/superpowers/specs/2026-05-25-sp8-docker-deploy-design.md` ✅
+- **Plan:** `docs/superpowers/plans/2026-05-25-sp8-docker-deploy.md` ✅
+- **Iteration log:** `docs/SP8_LOG.md` ✅
+- **Shipped:** multi-stage `Dockerfile` (python:3.12-slim, non-root `appuser`), `docker-entrypoint.sh` + `scripts/verify_env_runtime.py` (fail-fast env validator), `docker-compose.yml` (api + worker + caddy with healthcheck-gated `depends_on`), `Caddyfile` (`tls internal`, :80→:443 redirect), `el/worker.py` (poll loop + SIGTERM, claim-based dequeue), `el/web/run_service.py:claim_one_queued` (conditional-update race guard), `/healthz` extended to check db + vertex_creds (200/503), `el/web/routes/runs.py` simplified to enqueue-only, `requirements.txt` / `requirements-dev.txt` split, `.dockerignore`, `.github/workflows/deploy.yml` (test → build → GHCR push → deploy → healthz-gated rollback), `scripts/deploy/hetzner_bootstrap.sh`, `docs/runbooks/deploy.md`, opt-in `tests/integration/test_sp8_compose_smoke.py`. 50 new tests; 652/652 total green + 1 opt-in skipped.
+- **Deferred from master spec:** `el/web/asgi.py` (uvicorn invoked via CMD instead), `el/web/scheduler.py` (worker container replaces APScheduler), Sentry (sentry-sdk pinned in `requirements.txt` but no DSN wiring — pending decision on monitoring stack).
 - **Credentials to confirm at SP-start:** Hetzner account + SSH keypair, `GHCR_TOKEN`, optional `SENTRY_DSN`.
-- **Estimated effort:** 4–6 days.
 
 ### SP7 — Paper pipeline ⬜
 
@@ -174,6 +177,14 @@ A sub-project is "done" only when **all** of the following are true:
 ---
 
 ## Roadmap revisions
+
+### §2 — 2026-05-26 — SP8 implemented before SP6
+
+**Deviation:** Roadmap §Sub-project queue sequences `SP5 → SP6 → SP8 → SP7`. SP8 was implemented before SP6.
+
+**Reason:** SP8 unblocks the public HTTPS endpoint that SP4's deferred Supabase Auth magic-link and Telegram-WebApp trigger depend on (per `docs/SP4_LOG.md` §Surprises). Shipping the deploy substrate first means SP6 can target a real URL from day one, and SP5's production smokes (Gmail + Shopify auto-store) can run against the deployed box rather than a localhost uvicorn. The SP6 dependency list (SP1+SP4+SP5) is unchanged — those are all merged — so SP6 can still start whenever the SP8 wrap-up completes.
+
+**Impact on queue:** Effective order is now `SP5 → SP8 → SP6 → SP7`. SP7's preconditions (≥100 logged HIL events, SP1 dependency) are unaffected.
 
 ### §1 — 2026-05-21 — SP1 merged as fast-forward, not squash
 
