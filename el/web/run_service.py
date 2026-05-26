@@ -82,3 +82,32 @@ def mark_error(*, request_id: str, error_message: str, db_provider) -> None:
             "finished_at": _now_iso(),
         },
     )
+
+
+def claim_one_queued(*, worker_id: str, db_provider) -> dict | None:
+    """Atomic claim of the oldest queued run.
+
+    Two-step (find oldest queued -> conditional update with status=queued
+    guard) so concurrent workers cannot both win the same row. With
+    deploy.replicas=1 this is also a defense-in-depth measure.
+    """
+    candidates = db_provider.select_rows(
+        schema=RUN_REQUESTS_SCHEMA,
+        table=RUN_REQUESTS_TABLE,
+        filters={"status": "eq.queued"},
+        limit=1,
+    )
+    if not candidates:
+        return None
+    row_id = candidates[0]["id"]
+    claimed = db_provider.update_rows(
+        schema=RUN_REQUESTS_SCHEMA,
+        table=RUN_REQUESTS_TABLE,
+        filters={"id": f"eq.{row_id}", "status": "eq.queued"},
+        updates={
+            "status": "running",
+            "claimed_by": worker_id,
+            "started_at": _now_iso(),
+        },
+    )
+    return claimed[0] if claimed else None

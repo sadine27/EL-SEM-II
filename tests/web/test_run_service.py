@@ -95,3 +95,48 @@ def test_mark_error_records_truncated_message():
     assert call["updates"]["status"] == "error"
     assert len(call["updates"]["error_message"]) <= 2000
     assert "finished_at" in call["updates"]
+
+
+def test_claim_one_queued_returns_row_and_marks_running(fake_db):
+    from el.web import run_service
+    queued = fake_db.insert_rows(
+        schema="private", table="run_requests",
+        rows=[{"niche": "x", "dislikes": "", "budget_usd": None,
+               "submitted_by": "u", "status": "queued"}],
+    )[0]
+    claimed = run_service.claim_one_queued(
+        worker_id="worker-1", db_provider=fake_db,
+    )
+    assert claimed is not None
+    assert claimed["id"] == queued["id"]
+    assert fake_db.rows[queued["id"]]["status"] == "running"
+    assert fake_db.rows[queued["id"]]["claimed_by"] == "worker-1"
+
+
+def test_claim_one_queued_returns_none_when_empty(fake_db):
+    from el.web import run_service
+    assert run_service.claim_one_queued(worker_id="w", db_provider=fake_db) is None
+
+
+def test_claim_one_queued_skips_already_running(fake_db):
+    from el.web import run_service
+    fake_db.insert_rows(
+        schema="private", table="run_requests",
+        rows=[{"niche": "x", "dislikes": "", "budget_usd": None,
+               "submitted_by": "u", "status": "running"}],
+    )
+    assert run_service.claim_one_queued(worker_id="w", db_provider=fake_db) is None
+
+
+def test_claim_one_queued_loser_in_race_returns_none(fake_db):
+    """Two workers, one row: only the first claim wins."""
+    from el.web import run_service
+    row = fake_db.insert_rows(
+        schema="private", table="run_requests",
+        rows=[{"niche": "x", "dislikes": "", "budget_usd": None,
+               "submitted_by": "u", "status": "queued"}],
+    )[0]
+    first = run_service.claim_one_queued(worker_id="w1", db_provider=fake_db)
+    second = run_service.claim_one_queued(worker_id="w2", db_provider=fake_db)
+    assert first is not None and first["id"] == row["id"]
+    assert second is None
