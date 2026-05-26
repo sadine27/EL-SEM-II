@@ -4,7 +4,7 @@
 set -euo pipefail
 
 REPO="${REPO:-sadine27/EL-SEM-II}"
-PIN_SHA="${PIN_SHA:-REPLACE_WITH_COMMIT_SHA_AFTER_PUSH}"
+PIN_SHA="${PIN_SHA:-2cbeb73fba88be61a514981d89a53f8b420e99e2}"
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
 
 log() { printf '\n=== %s ===\n' "$*"; }
