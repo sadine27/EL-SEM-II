@@ -5,7 +5,7 @@
 > project is, what is done, and what is left*. Keep it current — see the
 > "Maintenance contract" section at the bottom.
 
-**Last updated:** 2026-05-26 (commit on `claude/project-completion-review-uXB5c`)
+**Last updated:** 2026-05-26 (credentials runbook added)
 **Current branch context:** Phase 3 SaaS build, mid-SP8.
 
 ---
@@ -103,7 +103,7 @@ Test baseline: **625 passing**, run with `python -m pytest tests/ -q`.
 | `docs/SP{1,2,3,4}_LOG.md`          | Iteration journal per merged sub-project.                                   |
 | `docs/superpowers/specs/`          | One design spec per SP. Master spec is `2026-05-10-phase3-saas-master-*`.   |
 | `docs/superpowers/plans/`          | One implementation plan per SP (task-by-task checklists).                   |
-| `docs/runbooks/`                   | Operational runbooks (currently: `shopify.md`).                             |
+| `docs/runbooks/`                   | Operational runbooks: `credentials.md` (teammate-facing creds guide), `shopify.md`. |
 | `docs/legacy/`                     | The original Saas reference: `Saas-PNG.png` + `Saas.pdf`.                   |
 | `PHASE3_ROADMAP.md`                | Live roadmap with per-SP status and next-action pointer.                    |
 | `.env.example`                     | All required + optional env vars, numbered, with sources.                   |
