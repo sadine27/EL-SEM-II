@@ -27,21 +27,33 @@ class FakeDB:
         return out
 
     def select_rows(self, *, schema, table, filters, select="*", limit=None):
-        raw = filters.get("id", "")
-        if raw.startswith("eq."):
-            key = raw[3:]
-            return [self.rows[key]] if key in self.rows else []
-        return list(self.rows.values())
+        def _matches(row):
+            for key, raw in filters.items():
+                if not raw.startswith("eq."):
+                    return False
+                if str(row.get(key)) != raw[3:]:
+                    return False
+            return True
+        matched = [r for r in self.rows.values() if _matches(r)]
+        if limit is not None:
+            matched = matched[:limit]
+        return matched
 
     def update_rows(self, *, schema, table, filters, updates):
-        raw = filters.get("id", "")
-        if not raw.startswith("eq."):
-            return []
-        key = raw[3:]
-        if key not in self.rows:
-            return []
-        self.rows[key].update(updates)
-        return [self.rows[key]]
+        def _matches(row):
+            for key, raw in filters.items():
+                if not raw.startswith("eq."):
+                    return False
+                if str(row.get(key)) != raw[3:]:
+                    return False
+            return True
+        matched = [r for r in self.rows.values() if _matches(r)]
+        for r in matched:
+            r.update(updates)
+        return matched
+
+    def list_queued(self):
+        return [r for r in self.rows.values() if r.get("status") == "queued"]
 
     def call_rpc(self, *, schema, function, params):
         return []
