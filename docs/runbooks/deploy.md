@@ -29,6 +29,29 @@ auto-deploy on push to `main`.
 6. **First deploy:** push to `main`. The workflow tests → builds → deploys →
    polls healthz → re-tags `:latest`. Watch it under Actions → deploy.
 
+## Laptop deploy (Cloudflare Quick Tunnel)
+
+Used instead of Hetzner while running locally. Run these three steps every time you restart:
+
+**Step 1 — Set env file and start Docker stack (PowerShell):**
+```powershell
+$env:EL_ENV_FILE = ".env"
+docker compose up -d
+```
+
+**Step 2 — Start the Cloudflare tunnel (keep this window open):**
+```powershell
+cloudflared tunnel --protocol http2 --url http://localhost:8000
+```
+
+**Step 3 — Copy the new tunnel URL** from the cloudflared output (it changes on every restart).
+
+**Verify:** open `https://<tunnel-url>/healthz` in browser — should return `{"ok": true}`.
+
+> Note: the tunnel URL is random and changes each restart. Update any clients/tests with the new URL.
+
+---
+
 ## Day-2 ops
 
 ### Logs

@@ -11,20 +11,22 @@ This is a **meta-document**. It does not design or specify any sub-project. Each
 
 ## Status snapshot
 
-_Last updated: 2026-05-27 (Supabase migrations applied + private schema exposed; next: POST /api/runs smoke test)._
+_Last updated: 2026-05-27 (POST /api/runs smoke test passed; full stack confirmed live — Docker + Cloudflare tunnel + API + Supabase all working)._
 
 | SP | Title | Status | Notes |
 |---|---|---|---|
 | SP1 | Telemetry Foundation | ✅ merged to main | All 10 plan tasks merged via fast-forward (see Roadmap revisions §1). 433/433 tests green, 92% overall coverage. Iteration log at `docs/SP1_LOG.md`. Migration applied in Supabase ✅ (2026-05-26). |
 | SP2 | Source Expansion | ✅ merged to main | Squash-merged at `cbb6b9a`. Scoped to 2 sources (YouTube refactor + Shopify competitor); 4 sources deferred per SP2 design spec §1. 463/463 tests green. Iteration log at `docs/SP2_LOG.md`. **Pending:** optional production smoke if Shopify-competitor is enabled. |
 | SP3 | Vision + pgvector | ✅ merged to main | Squash-merged at `dc2d400`. Vertex multimodal embeddings + pgvector HNSW + find_similar helper. Bing Visual Search deferred. 488/488 tests green. pgvector migration applied in Supabase ✅ (2026-05-26). **Pending:** production smoke (verify Vertex spend ≤ $0.02). |
-| SP4 | FastAPI + RAG chat bot | ✅ merged to main | Squash-merged at `8c1b3da`. FastAPI app at `el/web/`, bearer auth, in-memory rate limit, RAG chat over SSE, HTMX shell pages. Supabase Auth magic-link + Telegram WebApp + Redis deferred to SP6/SP8. 555/555 tests green. Iteration log at `docs/SP4_LOG.md`. `migrations/sp4/001_run_requests.sql` applied ✅ (2026-05-26). **Pending:** `POST /api/runs` smoke test. |
-| SP5 | Outbound (email, Shopify auto-store, notify) | ✅ merged to main | Squash-merged at `6eac26c`. Bundles SP5a (Gmail SMTP digest + per-product) and SP5b (Shopify Admin API theme + product upload); `notify_business` delivers live store URL. 602/602 tests green. **Pending:** configure Gmail app password + Shopify dev-store creds in prod `.env`; live smoke of email + theme + product upload. |
+| SP4 | FastAPI + RAG chat bot | ✅ merged to main | Squash-merged at `8c1b3da`. FastAPI app at `el/web/`, bearer auth, in-memory rate limit, RAG chat over SSE, HTMX shell pages. Supabase Auth magic-link + Telegram WebApp + Redis deferred to SP6/SP8. 555/555 tests green. Iteration log at `docs/SP4_LOG.md`. `migrations/sp4/001_run_requests.sql` applied ✅ (2026-05-26). `POST /api/runs` smoke ✅ (2026-05-27) — job queued in real Supabase DB. |
+| SP5 | Outbound (email, Shopify auto-store, notify) | ✅ merged to main | Squash-merged at `6eac26c`. Bundles SP5a (Gmail SMTP digest + per-product) and SP5b (Shopify Admin API theme + product upload); `notify_business` delivers live store URL. 602/602 tests green. **Pending:** configure Gmail app password + Shopify dev-store creds in prod `.env`; live smoke of email + theme + product upload. Credentials expected ~1 week. |
 | SP6 | CRM minimal | ✅ merged to main | Squash-merged at `e3019ad`. Supabase tables `private.suppliers` + `private.disputes` + `private.niche_performance`; `el/crm.py` data layer; `record_niche_performance` pipeline node; `/crm` HTMX dashboard + `/api/crm/*` routes extending SP4. 661/661 tests green. `migrations/sp6/001_crm_tables.sql` applied ✅ (2026-05-26, via combined script). **Pending:** browser smoke of `/crm` dashboard. |
-| SP8 | Docker + Laptop deploy | ✅ merged + verified | Squash-merged at `2cbeb73`. Docker local verification ✅ (image < 500 MB, cold-start < 10s, compose smoke passes). Deployed on laptop via Docker Compose + Cloudflare Quick Tunnel. `/healthz` green with real Supabase + Google SA. `private` schema exposed in Supabase API ✅ (2026-05-26). **Pending:** `POST /api/runs` smoke test; end-to-end niche→HIL→Shopify smoke. |
-| SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events in `private.hil_logging_events`. Sequenced last. |
+| SP8 | Docker + Laptop deploy | ✅ fully live | Squash-merged at `2cbeb73`. Docker Compose + Cloudflare Quick Tunnel running on laptop. `/healthz` ✅, `POST /api/runs` ✅ (2026-05-27). Stack confirmed: Docker + tunnel + API + Supabase all working end-to-end. **Pending:** end-to-end niche→HIL→Shopify smoke (blocked on SP5 credentials). |
+| SP7 | Paper pipeline (IPS overrides) | ⬜ not started | Depends on SP1 + ≥100 accrued events in `private.hil_logging_events`. Sequenced last. Pipeline must be running to accrue events — unblocks once SP5 credentials arrive and full pipeline runs. |
 
-**Next action:** Run `POST /api/runs` smoke test against the deployed Cloudflare tunnel URL to confirm the pipeline queues correctly. Then check `/crm` dashboard in browser. Then configure Gmail app password + Shopify dev-store creds in prod `.env` for SP5 live smoke. Check `private.hil_logging_events` row count — SP7 unblocks once ≥100 events accrued.
+**Next action:** Wait for SP5 credentials (Gmail app password + Shopify token, ~1 week). Once available: add to prod `.env`, restart Docker stack, submit a real niche, approve HIL card on Telegram, verify email + Shopify upload. This also starts accruing HIL events toward the SP7 gate (≥100 needed). In the meantime: open `/crm` dashboard in browser to verify SP6.
+
+**Stack restart reminder (laptop deploy):** `$env:EL_ENV_FILE = ".env"` → `docker compose up -d` → `cloudflared tunnel --protocol http2 --url http://localhost:8000` (tunnel URL changes each restart).
 
 **Step 0 status:** ✅ complete (2026-05-21). Paper work parked on `paper/phase2-revision` at commit `de79243`. `EL report content.docx` deleted (was an old Word version of the paper).
 
