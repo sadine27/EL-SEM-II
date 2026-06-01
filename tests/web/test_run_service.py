@@ -83,8 +83,26 @@ def test_mark_done_sets_status_and_finished_at():
     db = _FakeDB()
     run_service.mark_done(request_id="abc", db_provider=db)
     call = db.update_calls[0]
+    assert call["filters"] == {"id": "eq.abc", "status": "eq.running"}
     assert call["updates"]["status"] == "done"
     assert "finished_at" in call["updates"]
+
+
+def test_mark_done_does_not_overwrite_error_state(fake_db):
+    """A buggy worker calling mark_done after mark_error must not flip the row back."""
+    from el.web import run_service
+    row = fake_db.insert_rows(
+        schema="private", table="run_requests",
+        rows=[{"niche": "x", "dislikes": "", "budget_usd": None,
+               "submitted_by": "u", "status": "running"}],
+    )[0]
+    run_service.mark_error(
+        request_id=row["id"], error_message="boom", db_provider=fake_db,
+    )
+    assert fake_db.rows[row["id"]]["status"] == "error"
+    run_service.mark_done(request_id=row["id"], db_provider=fake_db)
+    assert fake_db.rows[row["id"]]["status"] == "error"
+    assert fake_db.rows[row["id"]]["error_message"] == "boom"
 
 
 def test_mark_error_records_truncated_message():

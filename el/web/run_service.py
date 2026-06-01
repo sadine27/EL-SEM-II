@@ -63,10 +63,13 @@ def mark_running(*, request_id: str, pipeline_run_id: str | None, db_provider) -
 
 
 def mark_done(*, request_id: str, db_provider) -> None:
+    # Guard with status=eq.running so a buggy worker that calls mark_done after
+    # mark_error cannot overwrite the error state. UPDATE matches 0 rows in
+    # that case and is a no-op.
     db_provider.update_rows(
         schema=RUN_REQUESTS_SCHEMA,
         table=RUN_REQUESTS_TABLE,
-        filters={"id": f"eq.{request_id}"},
+        filters={"id": f"eq.{request_id}", "status": "eq.running"},
         updates={"status": "done", "finished_at": _now_iso()},
     )
 
