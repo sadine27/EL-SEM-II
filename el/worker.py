@@ -69,11 +69,14 @@ def run_loop(
 
 
 def main() -> int:
+    from el.hil_poller import poll_loop
     from el.supabase import SupabaseRestProvider
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
+    poller = threading.Thread(target=poll_loop, kwargs={"stop": stop}, daemon=True, name="hil-poller")
+    poller.start()
     run_loop(
         db_provider=SupabaseRestProvider(),
         worker_id=_default_worker_id(),

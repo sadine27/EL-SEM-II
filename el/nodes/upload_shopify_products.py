@@ -24,10 +24,7 @@ def _slug(text: str) -> str:
 
 def _picks(ctx: dict) -> list[dict]:
     rows = ctx.get("hil_review_rows") or []
-    if isinstance(rows, list) and rows:
-        return [r for r in rows if isinstance(r, dict)]
-    picks = ctx.get("curated_picks") or []
-    return [p for p in picks if isinstance(p, dict) and "error" not in p]
+    return [r for r in rows if isinstance(r, dict)]
 
 
 def _name(pick: dict) -> str:

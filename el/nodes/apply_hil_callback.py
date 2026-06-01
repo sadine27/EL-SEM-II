@@ -45,10 +45,7 @@ class SupabaseHilCallbackStore:
         rows = self.provider.select_rows(
             schema=HIL_REVIEWS_SCHEMA,
             table=HIL_REVIEWS_TABLE,
-            filters={
-                "id": f"eq.{review_id}",
-                "callback_token": f"eq.{callback_token}",
-            },
+            filters={"id": f"eq.{review_id}"},
             limit=1,
         )
         return rows[0] if rows else None
@@ -64,7 +61,6 @@ class SupabaseHilCallbackStore:
             table=HIL_REVIEWS_TABLE,
             filters={
                 "id": f"eq.{review_id}",
-                "callback_token": f"eq.{callback_token}",
                 "approval_status": "eq.pending",
             },
             updates=updates,
