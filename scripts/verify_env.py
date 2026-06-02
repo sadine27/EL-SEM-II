@@ -12,7 +12,10 @@ from pathlib import Path
 import requests
 
 ROOT = Path(__file__).resolve().parents[1]
-ENV_PATH = ROOT / ".env.example"
+# Prefer the real .env (what production uses); fall back to .env.example only so the
+# script is still runnable in a fresh checkout. Override with EL_VERIFY_ENV_PATH.
+ENV_PATH = Path(os.environ["EL_VERIFY_ENV_PATH"]) if os.environ.get("EL_VERIFY_ENV_PATH") \
+    else (ROOT / ".env" if (ROOT / ".env").exists() else ROOT / ".env.example")
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -40,6 +43,10 @@ def warn(msg: str) -> None:
 def main() -> int:
     env = load_env(ENV_PATH)
     failures = 0
+    print(f"Reading credentials from: {ENV_PATH}")
+    if ENV_PATH.name == ".env.example":
+        warn("no .env found — probing example placeholders (expect failures). "
+             "Create .env to verify real credentials.")
 
     banner("1. YouTube Data API v3")
     key = env.get("YOUTUBE_API_KEY", "")
@@ -261,6 +268,30 @@ def main() -> int:
             ok(f"bot exists: @{bot.get('username')}")
         else:
             fail(f"HTTP {r.status_code}: {r.text[:200]}"); failures += 1
+
+    banner("10. Eprolo supplier (Forge — optional)")
+    ep_key = env.get("EPROLO_API_KEY", "")
+    ep_base = env.get("EPROLO_API_BASE_URL", "")
+    if not ep_key and not ep_base:
+        warn("not configured — Forge sources CJ only (Sentinel still runs). "
+             "Set EPROLO_API_KEY + EPROLO_API_BASE_URL to enable.")
+    elif not ep_key or not ep_base:
+        warn(f"partially configured (key={'set' if ep_key else 'missing'}, "
+             f"base_url={'set' if ep_base else 'missing'}) — Forge will skip Eprolo")
+    else:
+        try:
+            r = requests.get(
+                f"{ep_base.rstrip('/')}/products/search",
+                headers={"Authorization": f"Bearer {ep_key}"},
+                params={"q": "test", "limit": 1},
+                timeout=20,
+            )
+            if r.status_code == 200:
+                ok("Eprolo search endpoint reachable + authorized")
+            else:
+                warn(f"Eprolo HTTP {r.status_code}: {r.text[:200]} (Forge fails soft to CJ-only)")
+        except Exception as e:
+            warn(f"Eprolo probe failed: {e} (Forge fails soft to CJ-only)")
 
     print(f"\n{'=' * 70}\n {failures} failure(s)\n{'=' * 70}")
     return 1 if failures else 0
