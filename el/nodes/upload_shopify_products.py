@@ -1,7 +1,8 @@
 """SP5b — push each approved pick as a Shopify product.
 
-Handle (= idempotency key) is derived from the run id + product name so re-runs
-of the same approved batch reuse existing products rather than duplicating.
+Each run clears the store first so stale products never accumulate, then
+uploads the current slate. Handle is derived from product_name only (no
+run id) so the same product across runs reuses the same slot cleanly.
 """
 from __future__ import annotations
 
@@ -23,9 +24,12 @@ def _slug(text: str) -> str:
 
 
 def _picks(ctx: dict) -> list[dict]:
-    # Prefer human-approved HIL rows; fall back to curated_picks when no HIL
-    # review ran (e.g. Supabase/Telegram disabled) so the store still gets stocked.
-    rows = ctx.get("hil_review_rows") or ctx.get("curated_picks") or []
+    hil = ctx.get("hil_review_rows")
+    if hil:
+        # HIL path: only upload rows that have a real supplier product name
+        return [r for r in hil if isinstance(r, dict) and r.get("product_name")]
+    # Fallback: curated_picks when HIL is disabled (topic title is acceptable)
+    rows = ctx.get("curated_picks") or []
     return [r for r in rows if isinstance(r, dict)]
 
 
@@ -69,6 +73,19 @@ def _payload(pick: dict, *, niche: str) -> dict:
     }
 
 
+def _clear_existing_products(provider: shopify.ShopifyAdminProvider) -> None:
+    try:
+        products = provider.list_products()
+        for p in products:
+            try:
+                provider.delete_product(int(p["id"]))
+            except Exception:
+                log.warning("upload_shopify_products: could not delete product %s", p.get("id"))
+        log.info("upload_shopify_products: cleared %d existing product(s)", len(products))
+    except Exception:
+        log.exception("upload_shopify_products: clear step failed — continuing with upload")
+
+
 def run(ctx: dict, *, provider: shopify.ShopifyAdminProvider | None = None) -> dict:
     picks = _picks(ctx)
     if not picks:
@@ -77,7 +94,6 @@ def run(ctx: dict, *, provider: shopify.ShopifyAdminProvider | None = None) -> d
         return ctx
 
     niche = ctx.get("niche") or ""
-    run_id = ctx.get("request_id") or ctx.get("run_request_id") or "run"
 
     if provider is None:
         try:
@@ -90,11 +106,13 @@ def run(ctx: dict, *, provider: shopify.ShopifyAdminProvider | None = None) -> d
             log.exception("upload_shopify_products: provider init failed")
             return ctx
 
+    _clear_existing_products(provider)
+
     results: list[dict] = []
     succeeded = 0
     for pick in picks:
         name = _name(pick)
-        handle = _slug(f"{run_id}-{name}")
+        handle = _slug(name)
         try:
             product = provider.create_product(_payload(pick, niche=niche), idempotency_key=handle)
             results.append({

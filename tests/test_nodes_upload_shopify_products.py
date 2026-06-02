@@ -10,8 +10,13 @@ class FakeShopify:
     def __init__(self, fail_names: set[str] | None = None):
         self.fail_names = fail_names or set()
         self.created: list[tuple[dict, str | None]] = []
+        self.deleted: list[int] = []
         self.products_by_handle: dict[str, dict] = {}
+        self.products_by_id: dict[int, dict] = {}
         self._next_id = 100
+
+    def list_products(self, limit: int = 250) -> list[dict]:
+        return list(self.products_by_id.values())[:limit]
 
     def find_product_by_handle(self, handle):
         return self.products_by_handle.get(handle)
@@ -29,7 +34,14 @@ class FakeShopify:
         product = {"id": self._next_id, "handle": idempotency_key, "title": title}
         if idempotency_key:
             self.products_by_handle[idempotency_key] = product
+            self.products_by_id[self._next_id] = product
         return product
+
+    def delete_product(self, product_id: int) -> None:
+        self.deleted.append(product_id)
+        product = self.products_by_id.pop(product_id, None)
+        if product and product.get("handle"):
+            self.products_by_handle.pop(product["handle"], None)
 
 
 @pytest.fixture(autouse=True)
@@ -52,9 +64,9 @@ def test_all_picks_succeed_sets_store_url():
     assert len(res) == 2
     assert all(r["ok"] for r in res)
     assert ctx["shopify_store_url"] == "https://shop.myshopify.com"
-    # idempotency keys derived from request_id + slug(name)
+    # idempotency keys derived from slug(name) only — no run_id prefix
     keys = [k for _, k in shop.created]
-    assert keys == ["r-1-mat", "r-1-block"]
+    assert keys == ["mat", "block"]
     # payload shape
     p0 = shop.created[0][0]["product"]
     assert p0["title"] == "Mat"
@@ -110,9 +122,41 @@ def test_falls_back_to_curated_picks():
     assert shop.created[0][0]["product"]["title"] == "T1"
 
 
-def test_rerun_does_not_create_duplicate_products():
+def test_hil_rows_without_product_name_are_skipped():
+    """HIL rows lacking product_name (e.g. YouTube-title topic rows) are never uploaded."""
     ctx = {
-        "request_id": "r-5",
+        "hil_review_rows": [
+            {"product_name": "Real CJ Product", "price_text": "19.99"},
+            {"source_topic": "YouTube Title | Official Video", "price_text": "9.99"},
+        ],
+    }
+    shop = FakeShopify()
+    upload_shopify_products.run(ctx, provider=shop)
+    assert len(shop.created) == 1
+    assert shop.created[0][0]["product"]["title"] == "Real CJ Product"
+
+
+def test_clears_existing_products_before_upload():
+    """Each run deletes old products first so stale picks never accumulate."""
+    ctx = {
+        "hil_review_rows": [{"product_name": "Mat", "price_text": "29.99"}],
+    }
+    shop = FakeShopify()
+    upload_shopify_products.run(ctx, provider=shop)
+    first_ids = set(shop.products_by_id.keys())
+    assert len(first_ids) == 1
+    assert shop.deleted == []
+
+    upload_shopify_products.run(ctx, provider=shop)
+    second_ids = set(shop.products_by_id.keys())
+    assert len(second_ids) == 1
+    # first run's product was cleared
+    assert len(shop.deleted) == 1
+    assert first_ids.isdisjoint(second_ids)
+
+
+def test_second_run_clears_and_replaces_all_products():
+    ctx = {
         "niche": "yoga",
         "hil_review_rows": [
             {"product_name": "Mat", "price_text": "29.99"},
@@ -122,10 +166,12 @@ def test_rerun_does_not_create_duplicate_products():
     shop = FakeShopify()
 
     upload_shopify_products.run(ctx, provider=shop)
-    first_post_count = len(shop.created)
-    upload_shopify_products.run(ctx, provider=shop)
-    second_run_posts = len(shop.created) - first_post_count
+    first_ids = set(shop.products_by_id.keys())
+    assert len(first_ids) == 2
 
-    assert first_post_count == 2
-    assert second_run_posts == 0
+    upload_shopify_products.run(ctx, provider=shop)
+    second_ids = set(shop.products_by_id.keys())
+    assert len(second_ids) == 2
+    assert first_ids.isdisjoint(second_ids)  # replaced, not duplicated
+    assert len(shop.deleted) == 2            # both first-run products cleared
     assert ctx["shopify_store_url"] == "https://shop.myshopify.com"

@@ -34,6 +34,7 @@ class ShopifyAdminProvider(Protocol):
     def get_main_theme_id(self) -> int | None: ...
     def get_theme_asset(self, theme_id: int, key: str) -> dict: ...
     def update_theme_asset(self, theme_id: int, key: str, value: str) -> dict: ...
+    def list_products(self, limit: int = 250) -> list[dict]: ...
     def create_product(
         self, payload: dict, *, idempotency_key: str | None = None
     ) -> dict: ...
@@ -208,6 +209,13 @@ class ShopifyRestProvider:
         body = {"asset": {"key": key, "value": value}}
         resp = self._request("PUT", f"/themes/{theme_id}/assets.json", json_body=body)
         return resp.json().get("asset", {}) or {}
+
+    def list_products(self, limit: int = 250) -> list[dict]:
+        resp = self._request(
+            "GET", "/products.json",
+            params={"limit": min(limit, 250), "fields": "id,title,handle"},
+        )
+        return resp.json().get("products", []) or []
 
     def find_product_by_handle(self, handle: str) -> dict | None:
         resp = self._request("GET", "/products.json", params={"handle": handle, "limit": 1})
