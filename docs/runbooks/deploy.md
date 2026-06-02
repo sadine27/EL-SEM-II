@@ -29,6 +29,33 @@ auto-deploy on push to `main`.
 6. **First deploy:** push to `main`. The workflow tests → builds → deploys →
    polls healthz → re-tags `:latest`. Watch it under Actions → deploy.
 
+## Scheduling the daily run
+
+The `worker` container only **drains the `private.run_requests` queue** (on-demand
+niche runs submitted via the web app's `POST /api/runs`). It has **no built-in
+scheduler**, so the unparameterized daily trending batch (`python -m el run`,
+i.e. the one verified at go-live) must be triggered by host cron.
+
+Add a cron entry on the box (runs a clean one-off container alongside the
+long-lived worker; both share the same `.env`):
+
+```bash
+sudo tee /etc/cron.d/el-daily >/dev/null <<'EOF'
+# EL daily trending batch — 06:00 UTC. Logs to /var/log/el-cron.log
+0 6 * * * deploy cd /etc/el && /usr/bin/docker compose --env-file compose.env run --rm worker python -m el run >> /var/log/el-cron.log 2>&1
+EOF
+sudo touch /var/log/el-cron.log && sudo chown deploy:deploy /var/log/el-cron.log
+```
+
+Verify the next morning: `tail /var/log/el-cron.log` should end with
+`EL pipeline run end`, and `private.hil_reviews` should have rows for the new
+`run_date` (both `cj_dropshipping` and `forge_sentinel` providers). Errors also
+fire a Telegram dev-alert via the error handler.
+
+> Alternative: a systemd timer, or enqueue a `run_requests` row daily so the
+> existing worker picks it up. Cron + `run --rm` is the simplest and matches the
+> manually verified path.
+
 ## Day-2 ops
 
 ### Logs

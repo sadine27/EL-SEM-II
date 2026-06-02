@@ -1,5 +1,5 @@
 -- =============================================================================
--- Combined migrations: SP1 → SP3 → SP4 → SP6
+-- Combined migrations: SP1 → SP3 → SP4 → SP6 → SP9
 -- Apply in one paste in the Supabase SQL Editor.
 -- Every statement is idempotent — safe to re-run if partially applied.
 --
@@ -212,6 +212,27 @@ create table if not exists private.niche_performance (
   created_at         timestamptz   not null default now(),
   updated_at         timestamptz   not null default now()
 );
+
+
+-- ---------------------------------------------------------------------------
+-- SP9 — allow Sentinel-vetted Forge picks into the HIL queue
+-- (migrations/sp9_allow_forge_sentinel_hil_provider.sql)
+-- Widens the source_provider CHECK so 'forge_sentinel' rows can be inserted.
+-- No-op if hil_reviews has no such constraint yet (drop ... if exists).
+-- ---------------------------------------------------------------------------
+
+alter table private.hil_reviews
+  drop constraint if exists hil_reviews_source_provider_chk;
+
+alter table private.hil_reviews
+  add constraint hil_reviews_source_provider_chk
+  check (
+    source_provider in (
+      'cj_dropshipping',
+      'browserbase_marketplace',
+      'forge_sentinel'
+    )
+  );
 
 
 -- ---------------------------------------------------------------------------
