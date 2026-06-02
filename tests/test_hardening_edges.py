@@ -300,7 +300,9 @@ def test_pick_top_3_handles_malformed_response_shapes():
 def test_score_rank_skips_malformed_youtube_items():
     """Regression: malformed YouTube items crashed parse_youtube."""
     parsed = score_rank.parse_youtube([None, {"snippet": None}, {"snippet": {"title": "Topic", "tags": "bad"}}])
-    assert parsed == [{"topic": "Topic", "source": "youtube_trending", "tags": []}]
+    # Fenix engine added velocity/search_volume to the per-item shape.
+    assert parsed == [{"topic": "Topic", "source": "youtube_trending", "tags": [],
+                       "velocity": None, "search_volume": None}]
 
 
 def test_apply_supabase_store_adapter_methods():

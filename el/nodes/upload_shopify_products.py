@@ -23,7 +23,9 @@ def _slug(text: str) -> str:
 
 
 def _picks(ctx: dict) -> list[dict]:
-    rows = ctx.get("hil_review_rows") or []
+    # Prefer human-approved HIL rows; fall back to curated_picks when no HIL
+    # review ran (e.g. Supabase/Telegram disabled) so the store still gets stocked.
+    rows = ctx.get("hil_review_rows") or ctx.get("curated_picks") or []
     return [r for r in rows if isinstance(r, dict)]
 
 

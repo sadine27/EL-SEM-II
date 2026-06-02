@@ -8,10 +8,19 @@ from el.sources import TrendCandidate
 
 
 def test_load_enabled_sources_default(monkeypatch):
+    # Fenix engine: unset EL_SOURCES_ENABLED now enables every shipped source so
+    # nothing trending is missed. Key-gated sources fail soft when creds are absent.
     monkeypatch.delenv("EL_SOURCES_ENABLED", raising=False)
     sources = pipeline._load_enabled_sources()
-    assert len(sources) == 1
-    assert sources[0].SOURCE_ID == "youtube"
+    assert [s.SOURCE_ID for s in sources] == pipeline._DEFAULT_SOURCES
+    assert "youtube" in pipeline._DEFAULT_SOURCES
+    assert "google_news_india" in pipeline._DEFAULT_SOURCES
+
+
+def test_default_sources_all_resolve_in_registry():
+    # Every name in the default list must map to a real, loadable source module.
+    for name in pipeline._DEFAULT_SOURCES:
+        assert name in pipeline._SOURCE_REGISTRY
 
 
 def test_load_enabled_sources_explicit_list(monkeypatch):
@@ -36,7 +45,7 @@ def test_load_enabled_sources_preserves_order(monkeypatch):
 def test_load_enabled_sources_empty_value_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("EL_SOURCES_ENABLED", "")
     sources = pipeline._load_enabled_sources()
-    assert [s.SOURCE_ID for s in sources] == ["youtube"]
+    assert [s.SOURCE_ID for s in sources] == pipeline._DEFAULT_SOURCES
 
 
 def test_fetch_all_sources_aggregates(monkeypatch):
