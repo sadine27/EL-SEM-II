@@ -27,10 +27,14 @@ def run(ctx: dict, *, provider: TelegramProvider | None = None) -> dict:
     niche = ctx.get("niche") or "today's batch"
     n = _pick_count(ctx)
 
-    text = (
-        f"Run `{request_id}` done — {n} picks for {niche}.\n"
-        f"Chat: {base_url}/{request_id}"
-    )
+    lines = [
+        f"Run `{request_id}` done — {n} picks for {niche}.",
+        f"Chat: {base_url}/{request_id}",
+    ]
+    store_url = ctx.get("shopify_store_url")
+    if store_url:
+        lines.append(f"Store: {store_url}")
+    text = "\n".join(lines)
 
     try:
         if provider is None:
