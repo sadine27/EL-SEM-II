@@ -25,6 +25,19 @@ Kill switches (leave default unless you want to disable a stage):
 - `EL_HIL_LOGGING_ENABLED="true"` — ε-greedy logging.
 - `EL_EMBEDDINGS_ENABLED="true"` — pgvector embeddings (~$0.02/day).
 
+Telegram approval FX (presentation polish — on by default):
+
+- `EL_HIL_FX_ENABLED="true"` — punchy confirmation toast, a quick
+  "recording → done" card animation, and a celebratory ding on Approve/Reject.
+  Set `"false"` for the plain text-only behaviour.
+- `EL_HIL_FX_ALERT="false"` — set `"true"` to confirm with a modal popup
+  instead of the top toast (more visible on a projector; needs a tap to dismiss).
+- `EL_HIL_FX_DING="true"` — send a big animated emoji after each decision
+  (this is what makes Telegram play the notification "ding"). Set `"false"`
+  to keep the chat uncluttered.
+- `EL_HIL_FX_BUFFER_MS="400"` — how long the "⏳ recording…" frame lingers
+  before the final card (milliseconds). `0` disables the buffer frame.
+
 ---
 
 ## 1. Install dependencies
@@ -152,6 +165,8 @@ Everything is reversible via `.env` — no redeploy needed:
 | Sentinel in the daily run | `EL_FORGE_PIPELINE_ENABLED="false"` |
 | ε-greedy logging | `EL_HIL_LOGGING_ENABLED="false"` |
 | Embeddings spend | `EL_EMBEDDINGS_ENABLED="false"` |
+| Telegram approval FX (toast/animation/ding) | `EL_HIL_FX_ENABLED="false"` |
+| Just the ding (keep the animation) | `EL_HIL_FX_DING="false"` |
 | Shopify auto-store | clear `SHOPIFY_*` creds |
 
 The whole pipeline is fail-soft at IO boundaries: a missing/broken optional
