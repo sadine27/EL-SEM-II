@@ -72,9 +72,9 @@ _SOURCE_REGISTRY = {
 }
 
 # Default when EL_SOURCES_ENABLED is unset/empty: every source we ship. Key-gated
-# sources (youtube/reddit/newsapi) stay in the list but fail soft to [] when their
-# credentials are absent, so "everything free" runs with zero setup while paid keys
-# light up extra coverage.
+# sources (youtube/newsapi) stay in the list but fail soft to [] when their
+# credentials are absent, while no-key sources such as reddit scrape public pages
+# with zero setup.
 _DEFAULT_SOURCES = [
     "youtube", "pytrends", "reddit", "newsapi",
     "amazon_in_movers", "rss_india", "google_news_india",
