@@ -43,6 +43,7 @@ from el.nodes import (
     prepare_telegram_card,
     record_niche_performance,
     score_rank,
+    supplier_search,
     send_hil_telegram_photo,
     send_hil_telegram_text_fallback,
     stochastic_logger,
@@ -259,6 +260,43 @@ def collect_and_rank(initial_ctx: dict | None = None) -> dict:
     score_rank.run(ctx)
     ai_score_trends.run(ctx)
     return ctx.get("ranked_payload", {"metadata": {}, "trends": []})
+
+
+def preview_forge(
+    *,
+    query: str | None = None,
+    from_fenix: bool = False,
+    top: int = 10,
+    initial_ctx: dict | None = None,
+) -> dict:
+    """Run Forge preview only: Fenix ranking if requested, then supplier search.
+
+    This does not call Sheets, Supabase, Telegram, Shopify, or upload nodes.
+    """
+    if query:
+        ctx: dict = dict(initial_ctx) if initial_ctx else {}
+        ctx["ranked_payload"] = {
+            "metadata": {"mode": "query", "total_topics": 1},
+            "trends": [{"rank": 1, "topic": query}],
+        }
+        supplier_search.run(ctx, top=1)
+        if ctx.get("supplier_matches"):
+            ctx["supplier_matches"][0]["matches"] = ctx["supplier_matches"][0]["matches"][:max(0, top)]
+        return {
+            "metadata": ctx["ranked_payload"]["metadata"],
+            "supplier_matches": ctx.get("supplier_matches", []),
+        }
+
+    if from_fenix:
+        ranked_payload = collect_and_rank(initial_ctx=initial_ctx)
+        ctx = {"ranked_payload": ranked_payload}
+        supplier_search.run(ctx, top=top)
+        return {
+            "metadata": ranked_payload.get("metadata", {}),
+            "supplier_matches": ctx.get("supplier_matches", []),
+        }
+
+    raise ValueError("Forge preview requires query or from_fenix=True")
 
 
 def run_for_request(request_id: str, *, db_provider=None) -> str:
