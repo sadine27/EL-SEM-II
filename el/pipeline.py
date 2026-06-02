@@ -34,6 +34,7 @@ from el.nodes import (
     mark_telegram_text_fallback,
     merge_review_sources,
     normalize_cj_review,
+    normalize_sentinel_review,
     notify_business,
     parse_hil_callback,
     phase4_candidate_selection,
@@ -113,6 +114,13 @@ def _fetch_all_sources(sources, ctx: dict) -> list[TrendCandidate]:
     return aggregated
 
 
+def _forge_pipeline_enabled() -> bool:
+    """Master switch for the in-pipeline Forge→Sentinel stage (default on)."""
+    return (config.get("EL_FORGE_PIPELINE_ENABLED", "true") or "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
 def run(initial_ctx: dict | None = None) -> dict:
     """Execute the daily batch. Nodes are wired in order from EL.json.
 
@@ -146,6 +154,18 @@ def run(initial_ctx: dict | None = None) -> dict:
     # an open vocabulary (catches brand-new viral products). Fail-soft: no-op without
     # Vertex creds or when EL_AI_SCORING_ENABLED is off — keyword scores are kept.
     ai_score_trends.run(ctx)
+
+    # Forge + Sentinel: source supplier products for the ranked trends and vet them.
+    # Populates ctx["supplier_matches"]/["sentinel_matches"]; the passing picks are
+    # later normalized into the HIL pool alongside CJ (see normalize_sentinel_review
+    # below). Fully fail-soft and gated — a crash here never breaks the daily run, and
+    # supplier sources fail soft to [] without their own credentials.
+    if _forge_pipeline_enabled():
+        try:
+            supplier_search.run(ctx)
+            sentinel_vetting.run(ctx)
+        except Exception:
+            log.exception("Forge/Sentinel sourcing failed — continuing without vetted picks")
 
     if config.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
         create_day_tab.run(ctx)
@@ -182,6 +202,14 @@ def run(initial_ctx: dict | None = None) -> dict:
                 if config.get("EL_EMBEDDINGS_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}:
                     embed_candidate_products.run(ctx)
                 normalize_cj_review.run(ctx)
+                # Fold Sentinel-vetted picks into the HIL pool as a "forge_sentinel"
+                # provider, capped by phase4. No-op when the Forge stage is disabled
+                # or produced nothing; fail-soft so it never blocks the CJ review path.
+                if _forge_pipeline_enabled():
+                    try:
+                        normalize_sentinel_review.run(ctx)
+                    except Exception:
+                        log.exception("normalize_sentinel_review failed — CJ review path unaffected")
                 merge_review_sources.run(ctx)
                 phase4_candidate_selection.run(ctx)
                 stochastic_logger.run(ctx)

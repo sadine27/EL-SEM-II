@@ -19,6 +19,7 @@ FALLBACK_MAX_ITEMS = 2
 TOPIC_CAP = 2
 CJ_PROVIDER_CAP = 5
 BROWSERBASE_PROVIDER_CAP = 7
+SENTINEL_PROVIDER_CAP = 5
 TOTAL_CAP = 10
 
 STOP = {
@@ -757,6 +758,14 @@ def _select_internal(
                 "provider_cap_reached",
                 "Blocked because the browserbase provider cap was reached.",
                 {"provider_cap": BROWSERBASE_PROVIDER_CAP, "source_provider": provider_key},
+            ))
+            continue
+        if provider_key == "forge_sentinel" and provider_count >= SENTINEL_PROVIDER_CAP:
+            candidate.rejection_reasons.append(build_reason(
+                "cap",
+                "provider_cap_reached",
+                "Blocked because the Sentinel provider cap was reached.",
+                {"provider_cap": SENTINEL_PROVIDER_CAP, "source_provider": provider_key},
             ))
             continue
         if len(selected) >= TOTAL_CAP:
