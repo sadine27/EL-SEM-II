@@ -31,6 +31,9 @@ of the pipeline turns into a stocked store.
   batched (`EL_AI_SCORING_BATCH`) and capped (`EL_AI_SCORING_MAX_TOPICS`).
 - **New no-key source** `google_news_india` — topic-segmented Google News RSS
   (deals, gadgets, launches, sports merch, entertainment).
+- **Reddit source no longer needs API credentials** — it now scrapes public
+  subreddit JSON listing pages and fail-softs when Reddit blocks or changes a
+  response.
 - **`sports_and_merch` category** + merch exclusion zones in `score_rank`, so
   even without AI a "RCB jersey" topic categorizes correctly instead of falling
   into `uncategorized`.
@@ -70,6 +73,6 @@ rows exist (matches the documented test intent).
 
 - **Live Vertex smoke** of `ai_score_trends` once `GOOGLE_SERVICE_ACCOUNT_JSON`
   is provided: confirm the model returns parseable JSON and watch token spend.
-- **Reddit / NewsAPI live runs** once `REDDIT_*` / `NEWSAPI_KEY` are set.
+- **NewsAPI live runs** once `NEWSAPI_KEY` is set.
 - **Optional grounded AI source**: a web-search-backed "what's trending in India"
   source (needs `TAVILY_API_KEY`) to complement the source-fed AI brain.

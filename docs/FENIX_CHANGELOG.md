@@ -38,7 +38,7 @@ This was a ground-up rewrite of how the pipeline discovers and scores trends.
 | File | Source | Key needed? | Velocity signal |
 |---|---|---|---|
 | `pytrends_source.py` | Google Trends IN (daily + realtime) | No | 7-day hourly window (recent avg vs baseline) |
-| `reddit_source.py` | 14 India subreddits, hot posts | `REDDIT_CLIENT_ID/SECRET` | log-normalised upvotes/hour |
+| `reddit_source.py` | 14 India subreddits, hot posts | originally `REDDIT_CLIENT_ID/SECRET`; now public JSON scrape | log-normalised score/hour |
 | `newsapi_source.py` | India commerce headlines | `NEWSAPI_KEY` | none |
 | `amazon_in_source.py` | Amazon IN Movers & Shakers (scrape) | No | static `0.65` (definitionally rising) |
 | `rss_india_source.py` | 10 Indian tech/commerce RSS feeds | No | none |
@@ -52,6 +52,8 @@ This was a ground-up rewrite of how the pipeline discovers and scores trends.
 
 **Dependencies — `requirements.txt`**
 - Added `pytrends`, `praw`, `newsapi-python`, `beautifulsoup4`, `lxml`.
+  `praw` was later removed when the Reddit source was converted to a no-key
+  public JSON scraper.
 
 ### What it left broken (the gaps this session fixed)
 - **No tests** for any of the 5 new sources or the new scoring logic.
@@ -160,8 +162,9 @@ missing tests/docs, and repair the regressions `f4f3a25` left behind.
 **Full suite:** 738 passed, 1 skipped (opt-in compose smoke).
 
 ### 2.7 Documentation
-- **`.env.example`** — documented `REDDIT_*`, `NEWSAPI_KEY`, the `EL_AI_SCORING_*`
-  block, and the all-free `EL_SOURCES_ENABLED` default + every valid source name.
+- **`.env.example`** — documented `NEWSAPI_KEY`, the `EL_AI_SCORING_*` block,
+  and the all-free `EL_SOURCES_ENABLED` default + every valid source name.
+  Reddit no longer needs `REDDIT_*` credentials.
 - **`docs/FENIX_LOG.md`** — eyes/brain/safety-net architecture + iteration log.
 
 ### 2.8 Verified offline
@@ -177,9 +180,9 @@ scoring (banner: "keyword-scored (no Vertex creds / AI off)").
 | Item | Unblocks when |
 |---|---|
 | Live Vertex smoke of the AI brain (confirm parseable JSON + token spend) | `GOOGLE_SERVICE_ACCOUNT_JSON` set |
-| Reddit / NewsAPI live fetches | `REDDIT_*` / `NEWSAPI_KEY` set |
+| NewsAPI live fetches | `NEWSAPI_KEY` set |
 | Optional grounded "what's trending in India" AI web-search source | `TAVILY_API_KEY` set |
-| Install optional source libs in this environment | `pip install pytrends praw beautifulsoup4 lxml` |
+| Install optional source libs in this environment | `pip install pytrends beautifulsoup4 lxml` |
 
 All code paths above are already unit-tested against fakes; only live smoke runs
 are deferred.

@@ -12,7 +12,6 @@ sentry-sdk==2.18.0
 cachetools==5.5.2
 # Fenix engine — new data sources
 pytrends>=4.9.2
-praw>=7.7.1
 newsapi-python>=0.2.7
 beautifulsoup4>=4.12.3
 lxml>=5.2.1
