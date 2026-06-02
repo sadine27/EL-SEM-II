@@ -132,9 +132,56 @@ pytest
 
 ## Assumptions / scope
 
-- No database migrations in v1.
-- `phase4_candidate_selection` and the production HIL path are untouched.
-- Sentinel v1 is a preview + Forge-quality gate, not the HIL replacement yet.
+- No database migrations.
+- Sentinel is an **additive** review provider — it does not replace the CJ path.
 - Branch: this work shipped on the session branch `claude/ecstatic-bell-sR1im`
   (the draft named `codex/sentinel-product-vetting`; the session is pinned to the
   former).
+
+## Update: wired into the production daily run
+
+Sentinel is no longer preview-only. The daily `pipeline.run()` now sources and
+vets supplier products and feeds the **passing** picks into the human-in-the-loop
+approval queue as an additional provider, alongside CJ. The legacy CJ path is
+unchanged.
+
+Flow added to `run()`:
+
+```text
+... -> ai_score_trends (Fenix)
+     -> supplier_search (Forge)        # gated, fail-soft
+     -> sentinel_vetting (Sentinel)    # gated, fail-soft
+... -> normalize_cj_review
+     -> normalize_sentinel_review      # passing picks -> hil_v1 rows
+     -> merge_review_sources           # CJ + Browserbase + Sentinel
+     -> phase4_candidate_selection -> HIL Telegram cards
+```
+
+Key pieces:
+
+- **`el/nodes/normalize_sentinel_review.py`** — converts each passing Sentinel
+  match into the `hil_v1` review contract, tagged `source_provider="forge_sentinel"`.
+  `sentinel_score` (0..1) maps to `opportunity_score` on phase4's 0..10 scale
+  (`× 10`), so a 0.62 vetting score clears phase4's `MIN_SCORE`.
+- **`merge_review_sources`** now folds in `ctx["sentinel_review_items"]`.
+- **`phase4_candidate_selection`** gains `SENTINEL_PROVIDER_CAP = 5` so the new
+  provider is bounded (it shares the overall `TOTAL_CAP = 10`).
+- **`EL_FORGE_PIPELINE_ENABLED`** (default `"true"`) is the master switch. Set it
+  to `"false"` to make the daily run byte-for-byte identical to before. The whole
+  stage is fail-soft: any crash is logged and the run continues on the CJ path.
+
+Safety:
+
+- The Forge/Sentinel sourcing runs after Fenix ranking but its HIL hand-off only
+  takes effect where the CJ review branch runs (it merges right before
+  `merge_review_sources`, inside the Google+CJ-credential block). On a system with
+  CJ configured this means Sentinel picks reach the same Telegram cards; with no CJ
+  branch the vetted matches are still computed into `ctx["sentinel_matches"]` but
+  are not sent to HIL.
+- Supplier sources fail soft to `[]` without their own credentials, so enabling the
+  stage never crashes a credential-light run.
+
+Tests: `tests/test_sentinel_hil_integration.py` covers the normalize contract
+(field mapping, score scaling, dropping non-passing/incomplete rows), the merge
+fold-in, an end-to-end check that a vetted row clears phase4's score gate and is
+selected, the `forge_sentinel` provider cap, and the enablement switch.

@@ -16,11 +16,13 @@ def run(ctx: dict) -> dict:
     """Merge normalized review candidates from all supplier branches."""
     cj_items = _items(ctx.get("cj_review_items"))
     browserbase_items = _items(ctx.get("browserbase_review_items"))
-    review_candidates = [*cj_items, *browserbase_items]
+    sentinel_items = _items(ctx.get("sentinel_review_items"))
+    review_candidates = [*cj_items, *browserbase_items, *sentinel_items]
     ctx["review_candidates"] = review_candidates
     log.info(
-        "Merge Review Sources: merged %d CJ and %d Browserbase candidates",
+        "Merge Review Sources: merged %d CJ, %d Browserbase, %d Sentinel candidates",
         len(cj_items),
         len(browserbase_items),
+        len(sentinel_items),
     )
     return ctx
