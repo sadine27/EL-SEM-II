@@ -55,7 +55,7 @@ Set `EL_HIL_LOGGING_ENABLED=false` in `.env` and redeploy (or restart the worker
 - [x] All 400 pre-SP1 tests pass (current suite: 433 tests, all green).
 - [~] Per-file coverage for `el/nodes/stochastic_logger.py` is 88% — short of the 95% per-file target, but overall `el/` coverage is 92% (above the 90% floor). Missing lines are env-parse error branches (`_env_float`/`_env_int_or_none` bad-value warning paths) — low-priority defensive code.
 - [x] `tests/test_sp1_regression_safety.py` passes — confirms ε=0 produces byte-identical `hil_slate`.
-- [ ] One end-to-end production run writes ≥ 1 row to `hil_logging_events` and FK-matches `hil_reviews`. *(pending merge to main + deploy.)*
+- [x] One end-to-end production run writes ≥ 1 row to `hil_logging_events` and FK-matches `hil_reviews`. Verified 2026-06-02: 22 `hil_logging_events` rows today and 7 `hil_reviews` rows with `logging_event_id`.
 
 ## Surprises / decisions deferred
 

@@ -23,6 +23,7 @@ def test_pipeline_prepares_sheet_rows_without_google_credentials(monkeypatch):
     monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_SERVICE_ACCOUNT_JSON", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("EL_SOURCES_ENABLED", "youtube")
 
     def fake_score_rank(ctx: dict) -> dict:
         ctx["ranked_payload"] = _ranked_payload()
@@ -43,6 +44,7 @@ def test_pipeline_runs_sheet_nodes_when_google_credentials_exist(monkeypatch):
     monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
     monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_JSON", "{}")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("EL_SOURCES_ENABLED", "youtube")
 
     def fake_score_rank(ctx: dict) -> dict:
         ctx["ranked_payload"] = _ranked_payload()
@@ -93,6 +95,7 @@ def test_pipeline_runs_sheet_nodes_when_google_credentials_exist(monkeypatch):
 def test_pipeline_writes_curated_picks_when_google_and_gemini_exist(monkeypatch):
     monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
     monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_JSON", "{}")
+    monkeypatch.setenv("EL_SOURCES_ENABLED", "youtube")
 
     def fake_score_rank(ctx: dict) -> dict:
         ctx["ranked_payload"] = _ranked_payload()

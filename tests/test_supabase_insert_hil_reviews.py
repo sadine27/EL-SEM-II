@@ -48,6 +48,15 @@ def test_prepare_row_uses_safe_fallbacks_for_bad_json_fields():
     assert row["raw_payload"] == {}
 
 
+def test_prepare_row_fills_missing_scraped_at():
+    source = _row()
+    source.pop("scraped_at", None)
+
+    row = supabase_insert_hil_reviews.prepare_row(source)
+
+    assert row["scraped_at"].endswith("Z")
+
+
 def test_supabase_insert_hil_reviews_upserts_phase4_candidates():
     provider = FakeProvider()
     ctx = supabase_insert_hil_reviews.run(

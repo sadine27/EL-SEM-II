@@ -2,12 +2,17 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
 
 from el import supabase
 from el.logger import get_logger
 
 log = get_logger(__name__)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _parse_json_field(value: Any, fallback: Any) -> Any:
@@ -23,6 +28,8 @@ def prepare_row(row: dict) -> dict:
     prepared = dict(row)
     prepared["image_urls"] = _parse_json_field(prepared.get("image_urls"), [])
     prepared["raw_payload"] = _parse_json_field(prepared.get("raw_payload"), {})
+    if not prepared.get("scraped_at"):
+        prepared["scraped_at"] = _now_iso()
     return prepared
 
 
