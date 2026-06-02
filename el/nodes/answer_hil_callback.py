@@ -1,6 +1,7 @@
 """Port of n8n node `Answer HIL Callback`."""
 from __future__ import annotations
 
+from el import hil_fx as fx
 from el.logger import get_logger
 from el.telegram import TelegramProvider, default_provider
 
@@ -8,10 +9,21 @@ log = get_logger(__name__)
 
 
 def answer_result(result: dict, provider: TelegramProvider) -> dict:
+    status = str(result.get("approval_status") or "")
+    text = str(result.get("callback_answer_text") or "")
+    show_alert = bool(result.get("callback_answer_show_alert", False))
+
+    # Presentation FX: swap the plain "Approved recorded." for a punchy toast
+    # (or a modal popup) once a decision is actually finalized. Falls back to the
+    # plain copy whenever FX is off or the status is unknown.
+    if fx.fx_enabled() and result.get("message_should_finalize") and status in fx.KNOWN_STATUSES:
+        text = fx.toast_text(status)
+        show_alert = fx.alert_enabled()
+
     response = provider.answer_callback(
         callback_query_id=str(result.get("callback_query_id") or ""),
-        text=str(result.get("callback_answer_text") or ""),
-        show_alert=False,
+        text=text,
+        show_alert=show_alert,
         cache_time=0,
     )
     return {**result, "telegram_callback_answer_response": response}

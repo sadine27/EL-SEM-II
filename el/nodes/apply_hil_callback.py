@@ -174,6 +174,8 @@ def apply_callback(callback: dict, store: HilCallbackStore, *, now: datetime | N
         "approval_status": approval_status,
         "reviewed_by": reviewed_by,
         "reviewed_at": reviewed_at,
+        # Carried through for the presentation FX final card (best-effort label).
+        "product_name": row.get("product_name"),
         "message_should_finalize": updated is not None,
         "callback_answer_text": answer,
         "telegram_edit_text": (

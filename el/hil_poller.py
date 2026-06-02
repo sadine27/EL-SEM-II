@@ -3,7 +3,7 @@
 Long-polls Telegram getUpdates for callback_query updates (Approve/Reject taps).
 Each batch runs through the callback pipeline:
   parse_hil_callback → apply_hil_callback → answer_hil_callback
-  → if_callback_finalized_review → edit_hil_message (per finalized item)
+  → if_callback_finalized_review → edit_hil_message + send_hil_fx (per item)
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from el.nodes import apply_hil_callback
 from el.nodes import edit_hil_message
 from el.nodes import if_callback_finalized_review
 from el.nodes import parse_hil_callback
+from el.nodes import send_hil_fx
 
 log = logging.getLogger("el.hil_poller")
 
@@ -57,6 +58,7 @@ def _process_batch(updates: list[dict]) -> None:
     if_callback_finalized_review.run(ctx)
     for item in ctx.get("hil_finalized_callbacks") or []:
         edit_hil_message.run({"hil_finalized_callbacks": item})
+        send_hil_fx.run({"hil_finalized_callbacks": item})
 
 
 def poll_loop(*, stop: threading.Event, token: str | None = None) -> None:
