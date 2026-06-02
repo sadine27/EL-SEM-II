@@ -6,6 +6,11 @@ from el.logger import get_logger
 from el.sources import TrendCandidate
 from el.sources import shopify_competitor as shopify_competitor_source
 from el.sources import youtube as youtube_source
+from el.sources import pytrends_source
+from el.sources import reddit_source
+from el.sources import newsapi_source
+from el.sources import amazon_in_source
+from el.sources import rss_india_source
 from el.nodes import (
     answer_hil_callback,
     apply_hil_callback,
@@ -52,8 +57,15 @@ log = get_logger(__name__)
 
 
 _SOURCE_REGISTRY = {
+    # Original sources
     "youtube": youtube_source,
     "shopify_competitor": shopify_competitor_source,
+    # Fenix engine — new sources
+    "pytrends": pytrends_source,
+    "reddit": reddit_source,
+    "newsapi": newsapi_source,
+    "amazon_in_movers": amazon_in_source,
+    "rss_india": rss_india_source,
 }
 
 
@@ -65,7 +77,7 @@ def _load_enabled_sources():
     raw = config.get("EL_SOURCES_ENABLED")
     names = [n.strip() for n in (raw or "").split(",") if n.strip()]
     if not names:
-        names = ["youtube"]
+        names = ["youtube", "pytrends", "reddit", "newsapi", "amazon_in_movers", "rss_india"]
     out = []
     for name in names:
         mod = _SOURCE_REGISTRY.get(name)

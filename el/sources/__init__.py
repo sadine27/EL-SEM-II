@@ -18,6 +18,10 @@ class TrendCandidate:
     score_hint: float | None = None
     region: str = "IN"
     fetched_at: str | None = None
+    # Fenix engine additions
+    velocity: float | None = None       # growth rate vs baseline: 1.0 = +100%
+    search_volume: int | None = None    # 0-100 (pytrends scale) or absolute
+    cross_source_count: int = 1         # filled in by score_rank after aggregation
 
 
 @runtime_checkable
