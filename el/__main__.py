@@ -66,6 +66,43 @@ def _print_forge(query: str | None, from_fenix: bool, top: int, as_json: bool) -
     print()
 
 
+def _print_sentinel(query: str | None, from_fenix: bool, top: int, as_json: bool) -> None:
+    payload = pipeline.preview_sentinel(query=query, from_fenix=from_fenix, top=top)
+    if as_json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+
+    groups = payload.get("sentinel_matches", [])
+    print(f"\nSentinel vetted matches - {len(groups)} trend(s)\n")
+    for item in groups:
+        summary = item.get("summary", {})
+        print(
+            f"{item.get('query', '')}  "
+            f"({summary.get('passed', 0)} pass / {summary.get('rejected', 0)} reject "
+            f"of {summary.get('evaluated', 0)})"
+        )
+        rows = item.get("matches", [])
+        if not rows:
+            print("  no passing supplier matches")
+        for idx, match in enumerate(rows, start=1):
+            score = match.get("sentinel_score")
+            score_s = f"{score:.2f}" if isinstance(score, (int, float)) else "n/a"
+            margin = match.get("projected_margin_pct")
+            margin_s = f"{margin * 100:.0f}%" if isinstance(margin, (int, float)) else "n/a"
+            sell = match.get("projected_sell_price")
+            sell_s = f"{sell:.2f} {match.get('currency') or ''}".strip() if isinstance(sell, (int, float)) else "n/a"
+            warn = match.get("sentinel_warnings") or []
+            warn_s = f"  ⚠ {', '.join(warn)}" if warn else ""
+            print(
+                f"  {idx}. [{match.get('source_id')}] {match.get('title')} "
+                f"- score {score_s}, margin {margin_s}, sell {sell_s}{warn_s}"
+            )
+        for match in item.get("rejected", []):
+            reasons = ", ".join(match.get("sentinel_rejection_reasons") or [])
+            print(f"  ✗ [{match.get('source_id')}] {match.get('title')} - {reasons}")
+    print()
+
+
 def main(argv: list[str] | None = None) -> int:
     _prefer_utf8_stdout()
     parser = argparse.ArgumentParser(prog="python -m el")
@@ -91,6 +128,19 @@ def main(argv: list[str] | None = None) -> int:
     forge_p.add_argument("--top", type=int, default=10, help="query match or Fenix trend limit")
     forge_p.add_argument("--json", action="store_true", help="emit raw JSON payload")
 
+    sentinel_p = subparsers.add_parser(
+        "sentinel", help="preview Forge matches passed through the Sentinel vetting gate",
+    )
+    sentinel_group = sentinel_p.add_mutually_exclusive_group(required=True)
+    sentinel_group.add_argument("--query", help="single product query to source and vet")
+    sentinel_group.add_argument(
+        "--from-fenix",
+        action="store_true",
+        help="vet supplier matches for the top ranked Fenix trends",
+    )
+    sentinel_p.add_argument("--top", type=int, default=10, help="query match or Fenix trend limit")
+    sentinel_p.add_argument("--json", action="store_true", help="emit raw JSON payload")
+
     args = parser.parse_args(argv)
 
     if args.command == "run":
@@ -102,6 +152,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "forge":
         _print_forge(args.query, args.from_fenix, args.top, args.json)
+        return 0
+    if args.command == "sentinel":
+        _print_sentinel(args.query, args.from_fenix, args.top, args.json)
         return 0
     return 2
 

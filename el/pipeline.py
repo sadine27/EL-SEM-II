@@ -43,6 +43,7 @@ from el.nodes import (
     prepare_telegram_card,
     record_niche_performance,
     score_rank,
+    sentinel_vetting,
     supplier_search,
     send_hil_telegram_photo,
     send_hil_telegram_text_fallback,
@@ -262,16 +263,17 @@ def collect_and_rank(initial_ctx: dict | None = None) -> dict:
     return ctx.get("ranked_payload", {"metadata": {}, "trends": []})
 
 
-def preview_forge(
+def _forge_ctx(
     *,
-    query: str | None = None,
-    from_fenix: bool = False,
-    top: int = 10,
-    initial_ctx: dict | None = None,
-) -> dict:
-    """Run Forge preview only: Fenix ranking if requested, then supplier search.
+    query: str | None,
+    from_fenix: bool,
+    top: int,
+    initial_ctx: dict | None,
+) -> tuple[dict, dict]:
+    """Run Forge into a fresh ctx; return ``(ctx, metadata)``.
 
-    This does not call Sheets, Supabase, Telegram, Shopify, or upload nodes.
+    Shared by ``preview_forge`` and ``preview_sentinel`` so both build supplier
+    matches the same way. Touches no Sheets/Supabase/Telegram/Shopify/upload node.
     """
     if query:
         ctx: dict = dict(initial_ctx) if initial_ctx else {}
@@ -282,21 +284,53 @@ def preview_forge(
         supplier_search.run(ctx, top=1)
         if ctx.get("supplier_matches"):
             ctx["supplier_matches"][0]["matches"] = ctx["supplier_matches"][0]["matches"][:max(0, top)]
-        return {
-            "metadata": ctx["ranked_payload"]["metadata"],
-            "supplier_matches": ctx.get("supplier_matches", []),
-        }
+        return ctx, ctx["ranked_payload"]["metadata"]
 
     if from_fenix:
         ranked_payload = collect_and_rank(initial_ctx=initial_ctx)
         ctx = {"ranked_payload": ranked_payload}
         supplier_search.run(ctx, top=top)
-        return {
-            "metadata": ranked_payload.get("metadata", {}),
-            "supplier_matches": ctx.get("supplier_matches", []),
-        }
+        return ctx, ranked_payload.get("metadata", {})
 
     raise ValueError("Forge preview requires query or from_fenix=True")
+
+
+def preview_forge(
+    *,
+    query: str | None = None,
+    from_fenix: bool = False,
+    top: int = 10,
+    initial_ctx: dict | None = None,
+) -> dict:
+    """Run Forge preview only: Fenix ranking if requested, then supplier search."""
+    ctx, metadata = _forge_ctx(
+        query=query, from_fenix=from_fenix, top=top, initial_ctx=initial_ctx,
+    )
+    return {"metadata": metadata, "supplier_matches": ctx.get("supplier_matches", [])}
+
+
+def preview_sentinel(
+    *,
+    query: str | None = None,
+    from_fenix: bool = False,
+    top: int = 10,
+    initial_ctx: dict | None = None,
+) -> dict:
+    """Run Forge, then the Sentinel vetting gate on top of its matches.
+
+    Preview-only and credential-free: it sources supplier candidates exactly like
+    ``preview_forge`` and adds ``sentinel_matches`` without touching the legacy
+    HIL/Shopify path. Returns both the raw Forge matches and the vetted result.
+    """
+    ctx, metadata = _forge_ctx(
+        query=query, from_fenix=from_fenix, top=top, initial_ctx=initial_ctx,
+    )
+    sentinel_vetting.run(ctx)
+    return {
+        "metadata": metadata,
+        "supplier_matches": ctx.get("supplier_matches", []),
+        "sentinel_matches": ctx.get("sentinel_matches", []),
+    }
 
 
 def run_for_request(request_id: str, *, db_provider=None) -> str:
