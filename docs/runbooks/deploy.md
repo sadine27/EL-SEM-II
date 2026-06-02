@@ -1,4 +1,9 @@
-# SP8 — Production deploy runbook
+# SP8 — Production deploy runbook (OPTIONAL — 24/7 hosted path)
+
+> **Not the current setup.** EL runs on a laptop via Docker + Cloudflare tunnel —
+> see **`deploy-laptop.md`**. This Hetzner/GitHub-Actions path is kept only for an
+> optional always-on hosted version. Its `deploy` job is gated on
+> `vars.HETZNER_SSH_HOST`, so it stays skipped until someone opts in.
 
 Single Hetzner CX22, Docker Compose, Caddy with self-signed TLS, GitHub Actions
 auto-deploy on push to `main`.
