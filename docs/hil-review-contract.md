@@ -56,7 +56,7 @@ Each candidate sent to human review must produce one JSON object with the follow
 | `workflow_name` | string | yes | Workflow identifier. Use `EL`. |
 | `workflow_run_id` | string | yes | Execution identifier or deterministic run key for traceability. |
 | `run_date` | string | yes | Logical run date in `YYYY-MM-DD`. |
-| `source_provider` | string | yes | Source branch that produced the candidate. Initial values: `cj_dropshipping`, `browserbase_marketplace`. |
+| `source_provider` | string | yes | Source branch that produced the candidate. Initial values: `cj_dropshipping`, `browserbase_marketplace`, `forge_sentinel`. |
 | `source_topic` | string | yes | The original curated trend topic tied to the product. |
 | `source_pick_rank` | number/null | no | Rank from the upstream curated pick list. |
 | `opportunity_score` | number/null | no | Upstream AI opportunity score if available. |

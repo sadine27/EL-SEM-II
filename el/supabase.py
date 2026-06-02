@@ -29,6 +29,14 @@ HIL_REVIEWS_CONFLICT_COLUMNS = (
 )
 
 
+def _raise_for_status(resp: requests.Response) -> None:
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        body = resp.text[:1000]
+        raise requests.HTTPError(f"{exc}; response={body}", response=resp) from exc
+
+
 class SupabaseRestProvider:
     def __init__(self, url: str | None = None, key: str | None = None, timeout: int = 30):
         self.url = (url or config.require("SUPABASE_URL")).rstrip("/") + "/"
@@ -75,7 +83,7 @@ class SupabaseRestProvider:
             json=rows,
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        _raise_for_status(resp)
         data = resp.json()
         return data if isinstance(data, list) else [data]
 
@@ -104,7 +112,7 @@ class SupabaseRestProvider:
             json=updates,
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        _raise_for_status(resp)
         data = resp.json()
         return data if isinstance(data, list) else [data]
 
@@ -132,7 +140,7 @@ class SupabaseRestProvider:
             params=params,
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        _raise_for_status(resp)
         data = resp.json()
         return data if isinstance(data, list) else [data]
 
@@ -158,7 +166,7 @@ class SupabaseRestProvider:
             json=rows,
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        _raise_for_status(resp)
         data = resp.json()
         return data if isinstance(data, list) else [data]
 
@@ -184,7 +192,7 @@ class SupabaseRestProvider:
             json=params,
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        _raise_for_status(resp)
         data = resp.json()
         if isinstance(data, list):
             return data
@@ -216,6 +224,6 @@ class SupabaseRestProvider:
             json=updates,
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        _raise_for_status(resp)
         data = resp.json()
         return data if isinstance(data, list) else [data]
