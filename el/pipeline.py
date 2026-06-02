@@ -11,7 +11,9 @@ from el.sources import reddit_source
 from el.sources import newsapi_source
 from el.sources import amazon_in_source
 from el.sources import rss_india_source
+from el.sources import google_news_india_source
 from el.nodes import (
+    ai_score_trends,
     answer_hil_callback,
     apply_hil_callback,
     build_search_query,
@@ -66,18 +68,28 @@ _SOURCE_REGISTRY = {
     "newsapi": newsapi_source,
     "amazon_in_movers": amazon_in_source,
     "rss_india": rss_india_source,
+    "google_news_india": google_news_india_source,
 }
+
+# Default when EL_SOURCES_ENABLED is unset/empty: every source we ship. Key-gated
+# sources (youtube/reddit/newsapi) stay in the list but fail soft to [] when their
+# credentials are absent, so "everything free" runs with zero setup while paid keys
+# light up extra coverage.
+_DEFAULT_SOURCES = [
+    "youtube", "pytrends", "reddit", "newsapi",
+    "amazon_in_movers", "rss_india", "google_news_india",
+]
 
 
 def _load_enabled_sources():
     """Return source modules listed in EL_SOURCES_ENABLED, in given order.
 
-    Unknown names are logged and skipped. Empty/unset env var → ["youtube"].
+    Unknown names are logged and skipped. Empty/unset env var → _DEFAULT_SOURCES.
     """
     raw = config.get("EL_SOURCES_ENABLED")
     names = [n.strip() for n in (raw or "").split(",") if n.strip()]
     if not names:
-        names = ["youtube", "pytrends", "reddit", "newsapi", "amazon_in_movers", "rss_india"]
+        names = list(_DEFAULT_SOURCES)
     out = []
     for name in names:
         mod = _SOURCE_REGISTRY.get(name)
@@ -127,6 +139,11 @@ def run(initial_ctx: dict | None = None) -> dict:
         log.warning("YOUTUBE_API_KEY not set — skipping YouTube Trending IN")
 
     score_rank.run(ctx)
+
+    # Fenix engine: AI brain re-scores/re-categorizes the keyword-ranked topics with
+    # an open vocabulary (catches brand-new viral products). Fail-soft: no-op without
+    # Vertex creds or when EL_AI_SCORING_ENABLED is off — keyword scores are kept.
+    ai_score_trends.run(ctx)
 
     if config.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
         create_day_tab.run(ctx)
@@ -221,6 +238,27 @@ def run(initial_ctx: dict | None = None) -> dict:
 
     log.info("EL pipeline run end (ctx keys: %s)", list(ctx.keys()))
     return ctx
+
+
+def collect_and_rank(initial_ctx: dict | None = None) -> dict:
+    """Run only the Fenix front-end: fetch sources → score → AI re-score → rank.
+
+    Returns ``ctx["ranked_payload"]`` without touching any downstream node, so it
+    works with no Sheets/CJ/Supabase/Telegram credentials. Used by the ``trends``
+    preview CLI and is the cheapest way to eyeball engine output.
+    """
+    ctx: dict = dict(initial_ctx) if initial_ctx else {}
+    enabled_sources = _load_enabled_sources()
+    ctx["source_candidates"] = _fetch_all_sources(enabled_sources, ctx)
+
+    if config.get("YOUTUBE_API_KEY") and not any(
+        s.SOURCE_ID == "youtube" for s in enabled_sources
+    ):
+        youtube_trending.run(ctx)
+
+    score_rank.run(ctx)
+    ai_score_trends.run(ctx)
+    return ctx.get("ranked_payload", {"metadata": {}, "trends": []})
 
 
 def run_for_request(request_id: str, *, db_provider=None) -> str:

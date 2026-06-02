@@ -211,3 +211,108 @@ def test_run_with_no_youtube_items():
         out = sr.run(ctx)
     assert out["ranked_payload"]["metadata"]["total_topics"] == 0
     assert out["ranked_payload"]["trends"] == []
+
+
+# ---------- velocity boost (Fenix) ----------
+
+def test_velocity_boost_raises_rising_trend():
+    base = sr.score_intent("mystery gadget", [])
+    rising = sr.score_intent("mystery gadget", [], velocity=1.0)
+    assert rising > base
+
+
+def test_velocity_penalty_lowers_falling_trend():
+    base = sr.score_intent("best wireless earbuds price", [])
+    falling = sr.score_intent("best wireless earbuds price", [], velocity=-1.0)
+    assert falling < base
+
+
+def test_velocity_boost_is_clamped():
+    # Even an absurd velocity cannot push the score above 1.0.
+    assert sr.score_intent("buy cheap best price", [], velocity=999.0) == 1.0
+
+
+# ---------- TOPIC_EXCLUSIONS (the earbuds -> fashion bug fix) ----------
+
+def test_earbuds_not_mapped_to_fashion():
+    cats = sr.map_categories("wireless earbuds", [])
+    assert "electronics" in cats
+    assert "fashion" not in cats
+    assert "beauty" not in cats
+
+
+def test_exclusion_zone_removes_excluded_even_with_keyword_hit():
+    # "case" is an accessories keyword, but a smartphone topic excludes nothing
+    # about accessories; instead verify a fashion-anchored topic excludes electronics.
+    cats = sr.map_categories("designer saree with usb cable", [])
+    assert "electronics" not in cats  # excluded by 'saree'
+
+
+# ---------- anchor scoring ----------
+
+def test_anchor_outweighs_single_keyword():
+    # 'gaming laptop' is a 2-word electronics anchor (+4 + 3 = 7); a lone 'fan'
+    # keyword for home (+1) must not beat it.
+    cats = sr.map_categories("gaming laptop with fan", [])
+    assert cats[0] == "electronics"
+
+
+# ---------- sports_and_merch (RCB jersey) ----------
+
+def test_rcb_jersey_maps_to_sports_and_merch():
+    cats = sr.map_categories("RCB jersey", [])
+    assert "sports_and_merch" in cats
+
+
+def test_fan_merch_excludes_electronics_and_food():
+    cats = sr.map_categories("official team jersey and merchandise", [])
+    assert "sports_and_merch" in cats
+    assert "electronics" not in cats
+    assert "grocery_and_food" not in cats
+
+
+# ---------- cross-source boost + pluggable source_candidates path ----------
+
+def test_cross_source_boost_in_run():
+    from el.sources import TrendCandidate
+    # Same topic from three independent pluggable sources -> cross-source boost.
+    ctx = {
+        "source_candidates": [
+            TrendCandidate(title="trending smart bottle", source_id="pytrends"),
+            TrendCandidate(title="trending smart bottle", source_id="reddit"),
+            TrendCandidate(title="trending smart bottle", source_id="rss_india"),
+        ],
+    }
+    with patch.object(sr.requests, "get", side_effect=requests.ConnectionError("x")):
+        out = sr.run(ctx)
+    trend = out["ranked_payload"]["trends"][0]
+    assert trend["cross_source_count"] == 3
+
+
+def test_source_candidates_velocity_flows_into_payload():
+    from el.sources import TrendCandidate
+    ctx = {
+        "source_candidates": [
+            TrendCandidate(title="viral new toy", source_id="pytrends", velocity=0.8),
+        ],
+    }
+    with patch.object(sr.requests, "get", side_effect=requests.ConnectionError("x")):
+        out = sr.run(ctx)
+    trend = out["ranked_payload"]["trends"][0]
+    assert trend["velocity"] == 0.8
+    assert trend["source"] == "pytrends"
+
+
+def test_youtube_source_candidates_skipped_to_avoid_double_count():
+    from el.sources import TrendCandidate
+    # A youtube TrendCandidate must be ignored here (it arrives via youtube_items).
+    ctx = {
+        "youtube_items": [{"snippet": {"title": "Wireless Earbuds", "tags": []}}],
+        "source_candidates": [
+            TrendCandidate(title="Wireless Earbuds", source_id="youtube"),
+        ],
+    }
+    with patch.object(sr.requests, "get", side_effect=requests.ConnectionError("x")):
+        out = sr.run(ctx)
+    topics = [t["topic"] for t in out["ranked_payload"]["trends"]]
+    assert topics.count("Wireless Earbuds") == 1

@@ -71,12 +71,14 @@ def fetch_trends(ctx: dict) -> list[TrendCandidate]:
 
     candidates: list[TrendCandidate] = []
     now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    # Hoisted so the final log line is safe even if _make_client() raises.
+    daily_titles: list[str] = []
+    realtime_titles: list[str] = []
 
     try:
         client = _make_client()
 
         # ── Daily trending searches ──────────────────────────────────────
-        daily_titles: list[str] = []
         try:
             df = client.trending_searches(pn="india")
             daily_titles = df[0].tolist()[:_DAILY_LIMIT]
@@ -85,7 +87,6 @@ def fetch_trends(ctx: dict) -> list[TrendCandidate]:
         time.sleep(_CALL_DELAY)
 
         # ── Real-time trending searches ──────────────────────────────────
-        realtime_titles: list[str] = []
         try:
             rt = client.realtime_trending_searches(pn="IN")
             for _, row in rt.iterrows():

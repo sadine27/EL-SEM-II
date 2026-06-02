@@ -282,6 +282,24 @@ CATEGORIES: dict[str, dict] = {
             "grocery", "organic", "natural",
         },
     },
+    # Fan merchandise / event-driven trends (e.g. a team wins → fans buy jerseys).
+    # Kept distinct from `fashion` so downstream curation can target merch directly.
+    "sports_and_merch": {
+        "priority": 9,
+        "anchors": {
+            "team jersey", "cricket jersey", "football jersey", "fan jersey",
+            "ipl jersey", "rcb jersey", "csk jersey", "mi jersey",
+            "world cup jersey", "fan merchandise", "fan merch", "official merch",
+            "team merchandise", "signed memorabilia", "collectible figure",
+            "limited edition drop", "anime figure", "funko pop",
+        },
+        "keywords": {
+            "jersey", "merch", "merchandise", "memorabilia", "collectible",
+            "fan", "supporter", "fandom", "poster", "flag", "scarf", "mug",
+            "hoodie", "tshirt", "cap", "wristband", "keychain", "sticker",
+            "figurine", "trophy", "replica",
+        },
+    },
 }
 
 # ── Hard exclusion zones ──────────────────────────────────────────────────────
@@ -308,6 +326,10 @@ TOPIC_EXCLUSIONS: dict[str, set[str]] = {
     # Entertainment — prevent media titles from mapping to product categories
     "cricket match": {"electronics", "beauty", "grocery_and_food"},
     "ipl 2026": {"electronics", "beauty", "grocery_and_food"},
+    # Fan merch — a "jersey"/"merch" topic is apparel-adjacent, not electronics/food
+    "jersey": {"electronics", "grocery_and_food", "tools_and_hardware", "automotive"},
+    "merchandise": {"electronics", "grocery_and_food", "tools_and_hardware", "automotive"},
+    "fan merch": {"electronics", "grocery_and_food", "tools_and_hardware", "automotive"},
 }
 
 STOPWORDS = frozenset({
@@ -481,15 +503,19 @@ def dedupe(items: list[dict]) -> list[dict]:
             kept.append(cand)
         else:
             existing = kept[dup_idx]
+            # Final tiebreaker: when intent/cross-source/velocity are equal, keep the
+            # entry carrying richer related-query metadata (better downstream signal).
             cand_score = (
                 cand.get("product_intent_score", 0),
                 cand.get("cross_source_count", 1),
                 cand.get("velocity") or 0.0,
+                len(cand.get("related_queries") or []),
             )
             exist_score = (
                 existing.get("product_intent_score", 0),
                 existing.get("cross_source_count", 1),
                 existing.get("velocity") or 0.0,
+                len(existing.get("related_queries") or []),
             )
             if cand_score > exist_score:
                 kept[dup_idx] = cand
