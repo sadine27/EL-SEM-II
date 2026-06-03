@@ -31,6 +31,11 @@ graphify-out/
 .gemini/
 .aider*
 
+# GUI build artifacts (PyInstaller)
+dist/
+build/
+*.spec
+
 # OS generated
 .DS_Store
 Thumbs.db
