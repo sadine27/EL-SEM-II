@@ -3,7 +3,7 @@
 The keyword scorer in ``score_rank`` is fast but blind to anything outside its
 fixed vocabulary: a brand-new viral product (e.g. "Labubu") matches no keyword
 and scores ~0, even though the live sources surfaced it. This node fixes that by
-asking Gemini to judge each *already-collected* topic with an open vocabulary:
+asking Gemini to judge each *already-collected* topic with an open vocabulary::
 
     is this a physical product Indians would buy online right now (including
     fan merch for current events), how strong is the buy-intent, what category?
@@ -12,13 +12,16 @@ It runs **after** ``score_rank`` and overrides the keyword ``product_intent_scor
 and ``suggested_categories`` for topics the model recognises, then re-ranks.
 
 Design contract (fail-soft, no credentials required to import/run):
-  * ``EL_AI_SCORING_ENABLED`` (default "true") gates the whole node.
-  * Requires ``GOOGLE_SERVICE_ACCOUNT_JSON``; absent → no-op, keyword scores kept.
-  * Topics are batched (``EL_AI_SCORING_BATCH``) and capped
-    (``EL_AI_SCORING_MAX_TOPICS``) to bound cost.
-  * Provider creation, each batch call, and JSON parsing are individually
-    wrapped: any failure leaves the affected topics on their keyword scores.
-  * ``provider`` is injectable for tests (anything with ``.generate(system, user)``).
+
+* ``EL_AI_SCORING_ENABLED`` (default "true") gates the whole node.
+* Requires ``GOOGLE_SERVICE_ACCOUNT_JSON``; absent → no-op, keyword scores kept.
+* Topics are batched (``EL_AI_SCORING_BATCH``) and capped
+  (``EL_AI_SCORING_MAX_TOPICS``) to bound cost.
+* A **dollar cost cap** (``EL_AI_SCORING_MAX_COST_USD``) stops issuing API calls
+  once an estimated running total would exceed the budget. Default: $0.05/run.
+* Provider creation, each batch call, and JSON parsing are individually
+  wrapped: any failure leaves the affected topics on their keyword scores.
+* ``provider`` is injectable for tests (anything with ``.generate(system, user)``).
 """
 from __future__ import annotations
 
@@ -34,6 +37,11 @@ log = get_logger(__name__)
 _DEFAULT_BATCH = 40
 _DEFAULT_MAX_TOPICS = 120
 _DEFAULT_MODEL = "gemini-2.5-flash"
+_DEFAULT_MAX_COST_USD = 0.05
+
+# Model pricing per 1M tokens (Gemini 2.5 Flash, Vertex pricing as of 2025).
+_INPUT_COST_PER_M = 0.15
+_OUTPUT_COST_PER_M = 0.60
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
@@ -62,6 +70,9 @@ _SYSTEM = (
 )
 
 
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+
 def _strip_fences(text: str) -> str:
     return _FENCE_RE.sub("", (text or "").strip())
 
@@ -71,6 +82,15 @@ def _int_env(name: str, default: int) -> int:
     try:
         val = int(raw)  # type: ignore[arg-type]
         return val if val > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = config.get(name)
+    try:
+        val = float(raw)  # type: ignore[arg-type]
+        return val if val > 0.0 else default
     except (TypeError, ValueError):
         return default
 
@@ -116,6 +136,29 @@ def _coerce_intent(value) -> float | None:
         return None
 
 
+def _estimate_batch_cost(
+    batch_size: int,
+    model: str = _DEFAULT_MODEL,
+) -> float:
+    """Rough dollar estimate for one model call over *batch_size* topics.
+
+    Uses a coarse heuristic (~4 chars ≈ 1 token) because we don't have a real
+    tokeniser.  Gemini pricing varies by model; only ``gemini-2.5-flash`` is
+    recognised by name — everything else falls back to the same rate.
+    """
+    # Input: system prompt (~250 tokens) + user prompt (~10 tokens/topic)
+    est_input_tokens = int(250 + batch_size * 10)
+    # Output: ~50 tokens per topic (JSON envelope)
+    est_output_tokens = int(batch_size * 50)
+
+    input_cost = est_input_tokens / 1_000_000 * _INPUT_COST_PER_M
+    output_cost = est_output_tokens / 1_000_000 * _OUTPUT_COST_PER_M
+    return round(input_cost + output_cost, 6)
+
+
+# ── public API ───────────────────────────────────────────────────────────────
+
+
 def run(ctx: dict, *, provider=None) -> dict:
     """Override keyword scores with AI judgement where available, then re-rank."""
     if not _enabled():
@@ -141,20 +184,45 @@ def run(ctx: dict, *, provider=None) -> dict:
     max_topics = _int_env("EL_AI_SCORING_MAX_TOPICS", _DEFAULT_MAX_TOPICS)
     batch_size = _int_env("EL_AI_SCORING_BATCH", _DEFAULT_BATCH)
     model_hint = config.get("EL_AI_SCORING_MODEL", _DEFAULT_MODEL)
+    max_cost = _float_env("EL_AI_SCORING_MAX_COST_USD", _DEFAULT_MAX_COST_USD)
 
     scored_idx = list(range(min(len(trends), max_topics)))
     # str.replace (not .format) — _SYSTEM contains literal JSON braces.
     system = _SYSTEM.replace("{cats}", ", ".join(CATEGORIES.keys()))
 
     ai_count = 0
+    cumulative_cost = 0.0
     for start in range(0, len(scored_idx), batch_size):
         window = scored_idx[start : start + batch_size]
+        window_size = len(window)
+
+        # ---- cost gate ----------------------------------------------------
+        batch_cost = _estimate_batch_cost(window_size, model_hint)
+        if cumulative_cost + batch_cost > max_cost:
+            remaining = len(scored_idx) - start
+            log.info(
+                "ai_score_trends: cost cap $%.4f reached "
+                "(estimated $%.4f so far, skipping %d remaining topics)",
+                max_cost, cumulative_cost + batch_cost, remaining,
+            )
+            # Record the last batch that DID run (if any) before breaking.
+            if ai_count == 0:
+                log.warning("ai_score_trends: cost cap $%.4f too low — no topics enriched", max_cost)
+            break
+
         batch = [(i, trends[i].get("topic", "")) for i in window]
         try:
             raw = provider.generate(system, _build_user_prompt(batch))
         except Exception as exc:
-            log.warning("ai_score_trends: batch %d call failed (%s) — keyword scores kept", start, exc)
+            log.warning(
+                "ai_score_trends: batch %d call failed (%s) — keyword scores kept",
+                start, exc,
+            )
             continue
+
+        # Only accumulate cost AFTER a successful call
+        cumulative_cost += batch_cost
+
         results = _parse_response(raw)
         # Prompt lines are numbered by GLOBAL index, so the model echoes the
         # global "i" — look results up by global_i. (Using local_i silently
@@ -194,5 +262,9 @@ def run(ctx: dict, *, provider=None) -> dict:
     meta = payload.setdefault("metadata", {})
     meta["ai_scored_count"] = ai_count
     meta["ai_model"] = model_hint
-    log.info("ai_score_trends: enriched %d/%d topics via AI", ai_count, len(trends))
+    meta["ai_cost_estimate_usd"] = round(cumulative_cost, 6)
+    log.info(
+        "ai_score_trends: enriched %d/%d topics (est. cost $%.6f) via AI",
+        ai_count, len(trends), cumulative_cost,
+    )
     return ctx

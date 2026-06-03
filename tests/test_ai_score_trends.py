@@ -155,3 +155,63 @@ def test_prose_wrapped_json_is_recovered(monkeypatch):
     wrapped = 'Here you go:\n[{"i": 0, "is_product": true, "intent": 0.7}]\nThanks!'
     out = ai.run(ctx, provider=_Provider(wrapped))
     assert out["ranked_payload"]["trends"][0]["product_intent_score"] == 0.7
+
+
+# ── cost cap ──────────────────────────────────────────────────────────────────
+def test_cost_cap_below_first_batch_skips_all(monkeypatch):
+    """A cost cap too low for even one batch should skip all AI scoring."""
+    _cfg(monkeypatch, EL_AI_SCORING_MAX_COST_USD="0.0000001")
+    ctx = _payload("Labubu", "viral toy")
+    provider = _Provider(
+        _ai_json({"i": 0, "intent": 0.9}, {"i": 1, "intent": 0.8}),
+    )
+    out = ai.run(ctx, provider=provider)
+    trends = out["ranked_payload"]["trends"]
+    # Both should retain their keyword scores (0.0), not AI scores
+    assert all(t.get("product_intent_score") == 0.0 for t in trends)
+    assert all("ai_scored" not in t for t in trends)
+    assert "ai_scored_count" not in out["ranked_payload"].get("metadata", {})
+
+
+def test_cost_cap_after_first_batch_does_not_make_second_call(monkeypatch):
+    """A cap that fits one batch but not two should only score the first batch."""
+    # One batch of 40 topics costs ~$0.0013. Two batches ~$0.0026.
+    # Setting cap to $0.002 allows batch 1 but blocks batch 2.
+    _cfg(
+        monkeypatch,
+        EL_AI_SCORING_MAX_COST_USD="0.002",
+        EL_AI_SCORING_BATCH="40",
+        EL_AI_SCORING_MAX_TOPICS="80",
+    )
+    ctx = _payload(*[f"topic_{i}" for i in range(80)])
+    # Return valid json for batch 1 (first 40 topics)
+    payloads = [{"i": i, "intent": 0.5} for i in range(40)]
+    provider = _Provider(_ai_json(*payloads))
+    out = ai.run(ctx, provider=provider)
+    assert len(provider.calls) == 1  # only batch 1 was called
+    meta = out["ranked_payload"].get("metadata", {})
+    assert meta.get("ai_scored_count", 0) == 40  # only first batch scored
+    assert meta.get("ai_cost_estimate_usd", 0) > 0
+
+
+def test_cost_estimate_in_metadata(monkeypatch):
+    """Metadata should include an estimated cost after scoring."""
+    _cfg(monkeypatch)
+    ctx = _payload("Labubu")
+    provider = _Provider(_ai_json({"i": 0, "intent": 0.9}))
+    out = ai.run(ctx, provider=provider)
+    meta = out["ranked_payload"].get("metadata", {})
+    assert "ai_cost_estimate_usd" in meta
+    assert isinstance(meta["ai_cost_estimate_usd"], float)
+    assert meta["ai_cost_estimate_usd"] > 0
+
+
+def test_default_cost_cap_allows_full_batch(monkeypatch):
+    """Default cap of $0.05 should allow full batch of 120 topics."""
+    _cfg(monkeypatch, EL_AI_SCORING_BATCH="120")  # one big batch
+    ctx = _payload(*[f"topic_{i}" for i in range(120)])
+    provider = _Provider(_ai_json(*[{"i": i, "intent": 0.5} for i in range(120)]))
+    out = ai.run(ctx, provider=provider)
+    meta = out["ranked_payload"].get("metadata", {})
+    assert meta.get("ai_scored_count", 0) == 120
+    assert meta.get("ai_cost_estimate_usd", 0) <= 0.05
