@@ -24,9 +24,9 @@ def test_default_sources_all_resolve_in_registry():
 
 
 def test_load_enabled_sources_explicit_list(monkeypatch):
-    monkeypatch.setenv("EL_SOURCES_ENABLED", "youtube,shopify_competitor")
+    monkeypatch.setenv("EL_SOURCES_ENABLED", "youtube,rss_india")
     sources = pipeline._load_enabled_sources()
-    assert [s.SOURCE_ID for s in sources] == ["youtube", "shopify_competitor"]
+    assert [s.SOURCE_ID for s in sources] == ["youtube", "rss_india"]
 
 
 def test_load_enabled_sources_unknown_name_skipped(monkeypatch):
@@ -37,9 +37,9 @@ def test_load_enabled_sources_unknown_name_skipped(monkeypatch):
 
 
 def test_load_enabled_sources_preserves_order(monkeypatch):
-    monkeypatch.setenv("EL_SOURCES_ENABLED", "shopify_competitor,youtube")
+    monkeypatch.setenv("EL_SOURCES_ENABLED", "rss_india,youtube")
     sources = pipeline._load_enabled_sources()
-    assert [s.SOURCE_ID for s in sources] == ["shopify_competitor", "youtube"]
+    assert [s.SOURCE_ID for s in sources] == ["rss_india", "youtube"]
 
 
 def test_load_enabled_sources_empty_value_falls_back_to_default(monkeypatch):
