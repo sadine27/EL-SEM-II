@@ -30,7 +30,7 @@ def test_pipeline_prepares_sheet_rows_without_google_credentials(monkeypatch):
         return ctx
 
     monkeypatch.setattr(pipeline.score_rank, "run", fake_score_rank)
-    ctx = pipeline.run()
+    ctx = pipeline.run({})
     assert "sheet_tab" not in ctx
     assert "curated_picks_tab" not in ctx
     assert "sheet_append_result" not in ctx
@@ -84,7 +84,7 @@ def test_pipeline_runs_sheet_nodes_when_google_credentials_exist(monkeypatch):
     monkeypatch.setattr(pipeline.write_rows_to_sheet, "run", fake_write_rows)
     monkeypatch.setattr(pipeline.curate_picks, "run", fake_curate_picks)
     monkeypatch.setattr(pipeline.write_curated_picks, "run", fake_write_curated_picks)
-    ctx = pipeline.run()
+    ctx = pipeline.run({})
     assert ctx["sheet_tab"]["created"] is True
     assert ctx["curated_picks_tab"]["created"] is True
     assert ctx["sheet_rows"][0]["run_date"] == "2026-05-07"
@@ -145,7 +145,7 @@ def test_pipeline_writes_curated_picks_when_google_and_gemini_exist(monkeypatch)
     monkeypatch.setattr(pipeline.write_rows_to_sheet, "run", fake_write_rows)
     monkeypatch.setattr(pipeline.curate_picks, "run", fake_curate_picks)
     monkeypatch.setattr(pipeline.write_curated_picks, "run", fake_write_curated_picks)
-    ctx = pipeline.run()
+    ctx = pipeline.run({})
     assert ctx["curated_picks"][0]["topic"] == "Wireless Earbuds"
     assert ctx["cj_search_queries"] == [{
         "keyword": "wireless earbuds india",
