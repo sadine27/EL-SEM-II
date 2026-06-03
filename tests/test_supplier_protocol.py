@@ -32,7 +32,7 @@ def test_supplier_candidate_default_fields():
 
 def test_supplier_candidate_default_raw_payload_is_distinct_dict():
     a = SupplierCandidate(title="A", source_id="cj")
-    b = SupplierCandidate(title="B", source_id="eprolo")
+    b = SupplierCandidate(title="B", source_id="marketplace")
     assert a.raw_payload == {}
     assert b.raw_payload == {}
     assert a.raw_payload is not b.raw_payload

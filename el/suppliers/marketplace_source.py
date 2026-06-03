@@ -37,6 +37,14 @@ _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _MAX_PAGES_PER_TREND = 3
 _FETCH_TIMEOUT = 12
 
+# Believable-economics simulation (this is a demo listing source, not real
+# fulfillment): the scraped price is the *retail* price a shopper pays. We keep
+# it as the sell-side market reference and back-infer a plausible wholesale cost
+# so Sentinel can compute a real, believable margin instead of a circular markup.
+_DEFAULT_COST_FACTOR = 0.55        # wholesale cost ≈ 55% of retail → ~45% margin
+_DEFAULT_SHIP_DAYS_MIN = 3
+_DEFAULT_SHIP_DAYS_MAX = 7
+
 _BROWSER_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -89,6 +97,14 @@ def _flag(name: str, default: bool) -> bool:
     if raw is None:
         return default
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _float_config(name: str, default: float) -> float:
+    raw = config.get(name)
+    try:
+        return float(str(raw).strip()) if raw is not None else default
+    except (TypeError, ValueError):
+        return default
 
 
 def _is_marketplace(url: str) -> bool:
@@ -264,21 +280,40 @@ class MarketplaceSource:
             return None
 
         in_stock = data.get("in_stock", True)
+
+        # Believable-economics simulation: the scraped price IS the retail price
+        # the shopper pays. Keep it as the sell-side market reference and infer a
+        # plausible wholesale cost + delivery window so Sentinel's margin/delivery
+        # gates do real work (see module docstring + design spec).
+        retail = _to_float(data.get("price_inr"))
+        cost_factor = _float_config("EL_MARKETPLACE_COST_FACTOR", _DEFAULT_COST_FACTOR)
+        cost = round(retail * cost_factor, 2) if retail is not None else None
+        ship_min = _int_config("EL_MARKETPLACE_SHIP_DAYS_MIN", _DEFAULT_SHIP_DAYS_MIN)
+        ship_max = _int_config("EL_MARKETPLACE_SHIP_DAYS_MAX", _DEFAULT_SHIP_DAYS_MAX)
+
+        raw_payload: dict[str, Any] = {
+            "marketplace": next((d for d in _MARKETPLACE_DOMAINS if d in url), ""),
+            "description": str(data.get("description") or "").strip(),
+            "source_url": url,
+            "simulated_economics": True,
+        }
+        if retail is not None:
+            # Real scraped retail → Sentinel uses this as the sell price (market basis).
+            raw_payload["market_price"] = retail
+
         return SupplierCandidate(
             title=title,
             source_id=SOURCE_ID,
             product_url=url,
             image_url=(str(data["image_url"]).strip() if data.get("image_url") else None),
-            cost=_to_float(data.get("price_inr")),
+            cost=cost,
             currency="INR",
             shipping_cost=0.0,
+            shipping_days_min=ship_min,
+            shipping_days_max=ship_max,
             stock=1 if in_stock else 0,
             rating=_to_float(data.get("rating")),
-            raw_payload={
-                "marketplace": next((d for d in _MARKETPLACE_DOMAINS if d in url), ""),
-                "description": str(data.get("description") or "").strip(),
-                "source_url": url,
-            },
+            raw_payload=raw_payload,
         )
 
     def search_products(self, query: str, ctx: dict) -> list[SupplierCandidate]:
