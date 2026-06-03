@@ -25,7 +25,7 @@ phase is the act of reading every file and writing the walkthrough.
 | 1 | **Audience** | Developer technical reference (code-first) |
 | 2 | **Granularity** | Literal line-by-line walkthrough |
 | 3 | **Scope of line-by-line** | All production code (`el/`, `scripts/`, `migrations/`, web templates/CSS, Liquid shells) gets line-by-line. Tests get per-file summaries. Legacy n8n JSON gets structural description. The LaTeX paper gets a summary. |
-| 4 | **Format** | Multi-file Markdown under `docs/report/` + a master index. Optional single-PDF render at the end. |
+| 4 | **Format** | Multi-file Markdown under `docs/report/` + a master index. Markdown is the final deliverable — no PDF / no extra tooling. |
 | 5 | **Organization** | Hybrid (C): subsystem "Parts," flow-ordered within each, plus a file→section coverage matrix. |
 | 6 | **Walkthrough density** | Chunk-and-annotate (code block per logical block, prose accounting for every line, individual call-outs for non-obvious lines). |
 | 7 | **Review layer** | Documentation + light **Observations** call-outs (flag a genuine bug/risk/security concern/TODO/smell only where it actually exists; no forced findings). |
@@ -290,9 +290,9 @@ def _forge_pipeline_enabled() -> bool:
   every file in it is ☑. Final step cross-checks the matrix against the tree.
 - **Accuracy** — read before write; quote real code; describe behavior as
   written; never invent.
-- **Optional PDF** — after the Markdown is complete, optionally render a single
-  paginated PDF via pandoc (+ LaTeX engine) for a literal page count; Markdown
-  remains source of truth.
+- **No extra tooling** — Markdown is the final, self-contained deliverable.
+  Diagrams are inline Mermaid (render natively on GitHub); no pandoc/LaTeX/PDF
+  build step.
 
 ## 10. Out of scope (deliberately not transcribed)
 
@@ -309,8 +309,8 @@ generated, not project source.
 3. Each node section documents its `ctx` reads/writes.
 4. All 122 test files are summarized in Part 17.
 5. Legacy JSON has a node→Python mapping table; the paper is summarized.
-6. Mermaid diagrams for execution order and the HIL state machine render.
-7. The report builds to a single PDF on request (toolchain permitting).
+6. Mermaid diagrams for execution order and the HIL state machine render
+   natively (GitHub-flavored Markdown) — no external build step.
 
 ## Appendix A — Production-file inventory (coverage-matrix seed)
 
