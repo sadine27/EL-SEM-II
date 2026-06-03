@@ -527,7 +527,9 @@ def dedupe(items: list[dict]) -> list[dict]:
 def run(ctx: dict) -> dict:
     # ── 1. Collect all items from every source ───────────────────────────
     yt_items = parse_youtube(ctx.get("youtube_items") or [])
-    trends_items = fetch_trends_rss()
+    # Retired: Google killed the daily Trends RSS endpoint — it always 404s now.
+    # Real trend signal comes from the feeds + ai_trend_discovery via source_candidates.
+    trends_items: list[dict] = []
     news_items = fetch_news_rss()
 
     source_candidates: list[TrendCandidate] = ctx.get("source_candidates") or []

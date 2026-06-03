@@ -14,12 +14,18 @@ from el.suppliers import SupplierCandidate, SupplierSource
 
 log = get_logger(__name__)
 
-_DEFAULT_SUPPLIER_SOURCES = ["cj", "eprolo"]
+# marketplace = real Indian marketplace listings (Amazon.in/Flipkart/Meesho),
+# the only source that covers India-viral items. cj/eprolo remain importable but
+# off the default path: CJ has no India items, eprolo is a stub. Opt back in via
+# EL_SUPPLIER_SOURCES_ENABLED if ever needed.
+_DEFAULT_SUPPLIER_SOURCES = ["marketplace"]
 _SUPPLIER_MODULES = {
+    "marketplace": "el.suppliers.marketplace_source",
     "cj": "el.suppliers.cj_source",
     "eprolo": "el.suppliers.eprolo_source",
 }
 _SOURCE_RELIABILITY = {
+    "marketplace": 0.92,
     "cj": 0.90,
     "eprolo": 0.75,
 }
@@ -64,7 +70,10 @@ def _trend_query(trend: object) -> str:
     if isinstance(trend, str):
         return trend.strip()
     if isinstance(trend, dict):
-        for key in ("topic", "title", "query", "search_query_in", "suggested_product_type"):
+        # canonical_product is the AI-normalised buyable name (e.g. raw headline
+        # "Vivo X300 Ultra Review | ..." -> "Vivo X300 Ultra"). Prefer it so the
+        # supplier searches a real product, not a news headline or category label.
+        for key in ("canonical_product", "topic", "title", "query", "search_query_in", "suggested_product_type"):
             value = trend.get(key)
             if isinstance(value, str) and value.strip():
                 return value.strip()

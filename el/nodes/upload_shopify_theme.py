@@ -119,6 +119,14 @@ def _choice(value, allowed: set[str], fallback: str) -> str:
     return s if s in allowed else fallback
 
 
+def _bool(value, fallback: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return fallback
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _normalize_theme(theme: dict) -> dict:
     if isinstance(theme.get("tokens"), dict) and isinstance(theme.get("homepage"), dict):
         return theme
@@ -237,6 +245,8 @@ def _section_settings(section_id: str, normalized: dict) -> dict:
             "subhead": _text(raw.get("subhead"), "Curated products ready to browse.", max_len=140),
             "collection_handle": _handle(raw.get("collection_handle"), "all"),
             "product_limit": _int_range(raw.get("product_limit"), 8, 1, 24),
+            "show_badge": _bool(raw.get("show_badge"), True),
+            "badge_label": _text(raw.get("badge_label"), "Trending", max_len=24),
         }
     if section_id == "promo":
         return {
