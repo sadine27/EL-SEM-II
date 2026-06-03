@@ -156,8 +156,11 @@ def run(ctx: dict, *, provider=None) -> dict:
             log.warning("ai_score_trends: batch %d call failed (%s) — keyword scores kept", start, exc)
             continue
         results = _parse_response(raw)
-        for local_i, (global_i, _topic) in enumerate(batch):
-            res = results.get(local_i)
+        # Prompt lines are numbered by GLOBAL index, so the model echoes the
+        # global "i" — look results up by global_i. (Using local_i silently
+        # dropped every batch after the first, where global_i != local_i.)
+        for global_i, _topic in batch:
+            res = results.get(global_i)
             if not isinstance(res, dict):
                 continue
             trend = trends[global_i]

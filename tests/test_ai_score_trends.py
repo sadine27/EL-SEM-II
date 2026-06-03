@@ -110,12 +110,17 @@ def test_is_product_false_without_intent_zeroes_score(monkeypatch):
 def test_batching_makes_multiple_calls(monkeypatch):
     _cfg(monkeypatch, EL_AI_SCORING_BATCH="2")
     ctx = _payload("a", "b", "c")
+    # The prompt numbers topics by GLOBAL index, so the 2nd batch's lone topic is
+    # echoed back as i=2 (not i=0). Every topic must still get enriched.
     provider = _Provider(
         _ai_json({"i": 0, "intent": 0.5}, {"i": 1, "intent": 0.5}),
-        _ai_json({"i": 0, "intent": 0.5}),
+        _ai_json({"i": 2, "intent": 0.5}),
     )
-    ai.run(ctx, provider=provider)
+    out = ai.run(ctx, provider=provider)
     assert len(provider.calls) == 2  # ceil(3/2)
+    trends = out["ranked_payload"]["trends"]
+    assert all(t.get("ai_scored") for t in trends)              # no batch silently dropped
+    assert out["ranked_payload"]["metadata"]["ai_scored_count"] == 3
 
 
 def test_max_topics_cap(monkeypatch):
