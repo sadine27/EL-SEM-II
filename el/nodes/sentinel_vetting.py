@@ -37,9 +37,15 @@ Each vetted match carries the original Forge fields plus: ``sentinel_score``,
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from el import config
 from el.logger import get_logger
+from el.supabase import SupabaseRestProvider
+
+# Sentinel telemetry table (created by migration, Item 3.5)
+SENTINEL_LOG_TABLE = "sentinel_log"
+SENTINEL_LOG_SCHEMA = "private"
 
 log = get_logger(__name__)
 
@@ -302,8 +308,77 @@ def _passthrough(match: dict) -> dict:
     return vetted
 
 
-def run(ctx: dict) -> dict:
+# --------------------------------------------------------------------------- #
+# Sentinel telemetry logging (Item 3.5)                                       #
+# --------------------------------------------------------------------------- #
+def _log_sentinel_decisions(
+    groups: list[dict],
+    sentinel_matches: list[dict],
+    db: SupabaseRestProvider | None = None,
+) -> None:
+    """Log every vetting pass/reject to private.sentinel_log for SP7 tuning.
+
+    When both *db* and *SUPABASE_URL* env are unavailable the function is a
+    silent no-op — tests don't need Supabase credentials.
+    """
+    if db is None:
+        try:
+            from el import config as _cfg
+            if not _cfg.get("SUPABASE_URL"):
+                return  # no Supabase available — skip silently (e.g. unit tests)
+            db = SupabaseRestProvider()
+        except Exception:
+            return  # graceful skip when env isn't set
+    provider = db
+    log_rows: list[dict[str, Any]] = []
+
+    for group in groups:
+        trend = group.get("trend") or {}
+        query = (group.get("query") or "").strip()
+        trend_topic = (trend.get("topic") or query) if isinstance(trend, dict) else query
+        trend_rank = int(trend.get("rank") or 0) if isinstance(trend, dict) else None
+
+        for match in group.get("matches") or []:
+            vetted = _vet_match(match, trend, _load_config())
+            decision = vetted.get("sentinel_decision", "skipped")
+            if decision == "skipped":
+                continue
+            log_rows.append({
+                "query": query,
+                "trend_topic": trend_topic,
+                "trend_rank": trend_rank,
+                "product_title": (match.get("title") or "").strip(),
+                "source_id": (match.get("source_id") or "").strip(),
+                "sentinel_decision": decision,
+                "sentinel_score": vetted.get("sentinel_score"),
+                "rejection_reasons": vetted.get("sentinel_rejection_reasons") or [],
+                "warnings": vetted.get("sentinel_warnings") or [],
+                "projected_margin_pct": vetted.get("projected_margin_pct"),
+                "landed_cost": match.get("landed_cost") or match.get("cost"),
+                "shipping_days_max": match.get("shipping_days_max"),
+                "match_score": match.get("match_score"),
+                "pipeline_run_id": None,  # caller can patch if available
+            })
+
+    if log_rows:
+        try:
+            provider.insert_rows(
+                schema=SENTINEL_LOG_SCHEMA,
+                table=SENTINEL_LOG_TABLE,
+                rows=log_rows,
+            )
+            log.info("sentinel_telemetry: logged %d decisions", len(log_rows))
+        except Exception:
+            log.exception("sentinel_telemetry: failed to log decisions (non-fatal)")
+
+
+def run(
+    ctx: dict,
+    *,
+    db: SupabaseRestProvider | None = None,
+) -> dict:
     """Vet ``ctx["supplier_matches"]`` into ``ctx["sentinel_matches"]``.
+
 
     Output mirrors Forge's grouped shape so the CLI printer and any future
     consumer can reuse the same iteration. Each group gains a ``rejected`` list
@@ -355,4 +430,8 @@ def run(ctx: dict) -> dict:
         "sentinel_vetting: %d trend(s), %d evaluated → %d pass / %d reject",
         len(sentinel_matches), total_eval, total_pass, total_reject,
     )
+
+    # Telemetry — log every decision to sentinel_log for SP7 (non-fatal on failure)
+    _log_sentinel_decisions(groups, sentinel_matches, db=db)
+
     return ctx
