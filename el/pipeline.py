@@ -12,6 +12,7 @@ from el.sources import newsapi_source
 from el.sources import amazon_in_source
 from el.sources import rss_india_source
 from el.sources import google_news_india_source
+from el.sources import ai_trend_discovery as ai_trend_discovery_source
 from el.nodes import (
     ai_score_trends,
     answer_hil_callback,
@@ -65,22 +66,25 @@ _SOURCE_REGISTRY = {
     # Original sources
     "youtube": youtube_source,
     "shopify_competitor": shopify_competitor_source,
-    # Fenix engine — new sources
+    # Fenix engine — live feeds (real, no API approval needed)
+    "rss_india": rss_india_source,
+    "google_news_india": google_news_india_source,
+    # Fenix engine — AI + web-search trend discovery (primary brain)
+    "ai_trend_discovery": ai_trend_discovery_source,
+    # Retired sources (dead/blocked/approval-gated) kept importable but
+    # unregistered from the default run: pytrends (Google 404), reddit (public
+    # JSON blocked), amazon_in_movers (blocked), newsapi (multi-week approval).
+    # Opt back in explicitly via EL_SOURCES_ENABLED if ever revived.
     "pytrends": pytrends_source,
     "reddit": reddit_source,
     "newsapi": newsapi_source,
     "amazon_in_movers": amazon_in_source,
-    "rss_india": rss_india_source,
-    "google_news_india": google_news_india_source,
 }
 
-# Default when EL_SOURCES_ENABLED is unset/empty: every source we ship. Key-gated
-# sources (youtube/newsapi) stay in the list but fail soft to [] when their
-# credentials are absent, while no-key sources such as reddit scrape public pages
-# with zero setup.
+# Default when EL_SOURCES_ENABLED is unset/empty. AI discovery runs LAST so the
+# feed candidates collected before it are available as grounding headlines.
 _DEFAULT_SOURCES = [
-    "youtube", "pytrends", "reddit", "newsapi",
-    "amazon_in_movers", "rss_india", "google_news_india",
+    "youtube", "rss_india", "google_news_india", "ai_trend_discovery",
 ]
 
 
@@ -104,8 +108,14 @@ def _load_enabled_sources():
 
 
 def _fetch_all_sources(sources, ctx: dict) -> list[TrendCandidate]:
-    """Call fetch_trends on each source, isolating per-source failures."""
+    """Call fetch_trends on each source, isolating per-source failures.
+
+    ``ctx["source_candidates"]`` is updated incrementally so a later source
+    (e.g. ai_trend_discovery, ordered last) can read the candidates already
+    collected by the feed sources and use their titles as grounding.
+    """
     aggregated: list[TrendCandidate] = []
+    ctx["source_candidates"] = aggregated
     for src in sources:
         try:
             aggregated.extend(src.fetch_trends(ctx))

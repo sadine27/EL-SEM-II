@@ -14,12 +14,18 @@ from el.suppliers import SupplierCandidate, SupplierSource
 
 log = get_logger(__name__)
 
-_DEFAULT_SUPPLIER_SOURCES = ["cj", "eprolo"]
+# marketplace = real Indian marketplace listings (Amazon.in/Flipkart/Meesho),
+# the only source that covers India-viral items. cj/eprolo remain importable but
+# off the default path: CJ has no India items, eprolo is a stub. Opt back in via
+# EL_SUPPLIER_SOURCES_ENABLED if ever needed.
+_DEFAULT_SUPPLIER_SOURCES = ["marketplace"]
 _SUPPLIER_MODULES = {
+    "marketplace": "el.suppliers.marketplace_source",
     "cj": "el.suppliers.cj_source",
     "eprolo": "el.suppliers.eprolo_source",
 }
 _SOURCE_RELIABILITY = {
+    "marketplace": 0.92,
     "cj": 0.90,
     "eprolo": 0.75,
 }
