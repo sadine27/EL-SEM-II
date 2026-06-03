@@ -57,8 +57,11 @@ _SYSTEM = (
     "- Only output a product if it is supported by the supplied evidence. "
     "Every item MUST cite a source_url taken from the evidence. Do not invent "
     "URLs or trends.\n"
-    "- Prefer specific buyable items ('RCB IPL 2025 jersey') over vague topics "
-    "('cricket').\n\n"
+    "- 'product' MUST be a SPECIFIC, SEARCHABLE item with a brand and/or model "
+    "when the evidence implies one ('RCB IPL 2025 Jersey', 'Vivo X300 Ultra', "
+    "'Labubu Macaron Blind Box'). NEVER output a vague category like 'Smart "
+    "Wearable', 'Clean Beauty Product', 'Athleisure Clothing' or 'Smart Home "
+    "Gadget' — if you can only name a category, skip it.\n\n"
     "Return ONLY a JSON array, one object per product:\n"
     '{"product": "<buyable item name>", "category": "<short category>", '
     '"why_trending": "<one short phrase>", "intent": <float 0..1>, '

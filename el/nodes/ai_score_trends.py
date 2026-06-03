@@ -48,6 +48,13 @@ _SYSTEM = (
     "Return ONLY a JSON array, one object per input topic, each shaped:\n"
     '{"i": <int index>, "is_product": <bool>, "intent": <float 0..1>, '
     '"category": "<short category>", "canonical_product": "<buyable item name>"}\n\n'
+    "canonical_product MUST be a SPECIFIC, SEARCHABLE product a shopper could type "
+    "into Amazon.in or Flipkart and get the exact item — include the brand and/or "
+    "model whenever the topic implies one (e.g. 'Vivo X300 Ultra', 'RCB IPL 2025 "
+    "Jersey', 'Labubu Macaron Blind Box'). NEVER return a vague category like "
+    "'Smart Wearable', 'Clean Beauty Product' or 'Athleisure Clothing'. If the "
+    "topic is not a concrete buyable product, set is_product=false and leave "
+    "canonical_product as an empty string.\n\n"
     "intent = how strong the immediate purchase intent is (1.0 = people are "
     "actively buying this today; 0.0 = not a product / no commercial intent). "
     "Prefer these categories when they fit, else use a short sensible label: "

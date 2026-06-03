@@ -70,7 +70,10 @@ def _trend_query(trend: object) -> str:
     if isinstance(trend, str):
         return trend.strip()
     if isinstance(trend, dict):
-        for key in ("topic", "title", "query", "search_query_in", "suggested_product_type"):
+        # canonical_product is the AI-normalised buyable name (e.g. raw headline
+        # "Vivo X300 Ultra Review | ..." -> "Vivo X300 Ultra"). Prefer it so the
+        # supplier searches a real product, not a news headline or category label.
+        for key in ("canonical_product", "topic", "title", "query", "search_query_in", "suggested_product_type"):
             value = trend.get(key)
             if isinstance(value, str) and value.strip():
                 return value.strip()
