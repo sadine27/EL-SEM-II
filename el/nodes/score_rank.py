@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 
 import requests
 
+from el import config
 from el.logger import get_logger
 from el.nodes._score_config import (
     CATEGORIES,
@@ -38,7 +39,7 @@ from el.sources import TrendCandidate
 log = get_logger(__name__)
 
 NEWS_RSS_URL = "https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en"
-RSS_TIMEOUT = 30
+RSS_TIMEOUT = int(config.get("EL_RSS_TIMEOUT", "30"))
 MAX_RAW_ITEMS = 2000
 MAX_NEWS_ITEMS = 100
 DEDUPE_OVERLAP_THRESHOLD = 0.70

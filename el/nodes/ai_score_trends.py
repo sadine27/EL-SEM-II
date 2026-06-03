@@ -36,7 +36,7 @@ log = get_logger(__name__)
 
 _DEFAULT_BATCH = 40
 _DEFAULT_MAX_TOPICS = 120
-_DEFAULT_MODEL = "gemini-2.5-flash"
+_DEFAULT_MODEL = "gemini-2.5-pro-exp-03-25"
 _DEFAULT_MAX_COST_USD = 0.05
 
 # Model pricing per 1M tokens (Gemini 2.5 Flash, Vertex pricing as of 2025).
@@ -143,7 +143,7 @@ def _estimate_batch_cost(
     """Rough dollar estimate for one model call over *batch_size* topics.
 
     Uses a coarse heuristic (~4 chars ≈ 1 token) because we don't have a real
-    tokeniser.  Gemini pricing varies by model; only ``gemini-2.5-flash`` is
+    tokeniser.  Gemini pricing varies by model; only ``gemini-2.5-pro-exp-03-25`` is
     recognised by name — everything else falls back to the same rate.
     """
     # Input: system prompt (~250 tokens) + user prompt (~10 tokens/topic)
@@ -157,6 +157,26 @@ def _estimate_batch_cost(
 
 
 # ── public API ───────────────────────────────────────────────────────────────
+
+
+
+def _call_with_retry(provider, system: str, prompt: str, max_retries: int = 2) -> str:
+    """Call provider.generate with simple retry + exponential backoff."""
+    import time as _time
+    last_exc = None
+    for attempt in range(max_retries + 1):
+        try:
+            return provider.generate(system, prompt)
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries:
+                wait = (attempt + 1) * 2.0
+                log.warning(
+                    "ai_score_trends: retry %d/%d after %s in %.1fs",
+                    attempt + 1, max_retries, exc, wait,
+                )
+                _time.sleep(wait)
+    raise last_exc  # type: ignore[misc]
 
 
 def run(ctx: dict, *, provider=None) -> dict:
@@ -212,7 +232,7 @@ def run(ctx: dict, *, provider=None) -> dict:
 
         batch = [(i, trends[i].get("topic", "")) for i in window]
         try:
-            raw = provider.generate(system, _build_user_prompt(batch))
+            raw = _call_with_retry(provider, system, _build_user_prompt(batch))
         except Exception as exc:
             log.warning(
                 "ai_score_trends: batch %d call failed (%s) — keyword scores kept",
