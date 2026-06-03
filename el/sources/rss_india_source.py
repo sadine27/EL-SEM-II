@@ -10,13 +10,24 @@ from datetime import datetime, timezone
 
 import requests
 
+from el import config
 from el.logger import get_logger
 from el.sources import TrendCandidate
 
 SOURCE_ID = "rss_india"
 log = get_logger(__name__)
 
-_TIMEOUT = 20
+_TIMEOUT = 20  # overridable via env var EL_RSS_TIMEOUT
+
+def _rss_timeout() -> int:
+    """Return the configured RSS fetch timeout (default 20s)."""
+    raw = config.get("EL_RSS_TIMEOUT")
+    try:
+        val = int(raw)  # type: ignore[arg-type]
+        return val if val > 0 else _TIMEOUT
+    except (TypeError, ValueError):
+        return _TIMEOUT
+
 _MAX_PER_FEED = 20
 
 # (url, feed_id) — covering tech, gadgets, deals, finance, consumer products
@@ -61,7 +72,7 @@ def fetch_trends(ctx: dict) -> list[TrendCandidate]:
 
     for url, feed_id in _FEEDS:
         try:
-            resp = requests.get(url, timeout=_TIMEOUT)
+            resp = requests.get(url, timeout=_rss_timeout())
             if resp.status_code != 200:
                 log.debug("rss_india %s → HTTP %d", feed_id, resp.status_code)
                 continue

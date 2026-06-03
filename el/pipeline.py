@@ -4,12 +4,7 @@ from __future__ import annotations
 from el import config
 from el.logger import get_logger
 from el.sources import TrendCandidate
-from el.sources import shopify_competitor as shopify_competitor_source
 from el.sources import youtube as youtube_source
-from el.sources import pytrends_source
-from el.sources import reddit_source
-from el.sources import newsapi_source
-from el.sources import amazon_in_source
 from el.sources import rss_india_source
 from el.sources import google_news_india_source
 from el.sources import ai_trend_discovery as ai_trend_discovery_source
@@ -63,22 +58,12 @@ log = get_logger(__name__)
 
 
 _SOURCE_REGISTRY = {
-    # Original sources
     "youtube": youtube_source,
-    "shopify_competitor": shopify_competitor_source,
     # Fenix engine — live feeds (real, no API approval needed)
     "rss_india": rss_india_source,
     "google_news_india": google_news_india_source,
     # Fenix engine — AI + web-search trend discovery (primary brain)
     "ai_trend_discovery": ai_trend_discovery_source,
-    # Retired sources (dead/blocked/approval-gated) kept importable but
-    # unregistered from the default run: pytrends (Google 404), reddit (public
-    # JSON blocked), amazon_in_movers (blocked), newsapi (multi-week approval).
-    # Opt back in explicitly via EL_SOURCES_ENABLED if ever revived.
-    "pytrends": pytrends_source,
-    "reddit": reddit_source,
-    "newsapi": newsapi_source,
-    "amazon_in_movers": amazon_in_source,
 }
 
 # Default when EL_SOURCES_ENABLED is unset/empty. AI discovery runs LAST so the
@@ -118,290 +103,448 @@ def _fetch_all_sources(sources, ctx: dict) -> list[TrendCandidate]:
     ctx["source_candidates"] = aggregated
     for src in sources:
         try:
-            aggregated.extend(src.fetch_trends(ctx))
+            candidates = src.fetch_trends(ctx)
         except Exception:
-            log.exception("source %s: fetch_trends crashed", getattr(src, "SOURCE_ID", "?"))
+            log.exception("_fetch_all_sources: source %s crashed", src.SOURCE_ID)
+            continue
+        for c in (candidates or []):
+            aggregated.append(c)
+            ctx["source_candidates"] = aggregated
+        log.info("_fetch_all_sources: %s → %d", src.SOURCE_ID, len(candidates or []))
     return aggregated
 
 
+def collect_and_rank(initial_ctx: dict | None = None) -> dict:
+    """Run only fetch → score → AI → rank (no downstream nodes).
+
+    Returns ``ctx["ranked_payload"]`` — a dict with ``metadata`` and ``trends``.
+    Useful for the ``python -m el trends`` preview CLI and for Forge/Sentinel
+    preview commands that need ranked topics without full pipeline execution.
+    """
+    ctx = dict(initial_ctx or {})
+    enabled_sources = _load_enabled_sources()
+    ctx["source_candidates"] = _fetch_all_sources(enabled_sources, ctx)
+    try:
+        ctx = score_rank.run(ctx)
+    except Exception:
+        log.exception("collect_and_rank: score_rank crashed")
+    try:
+        ctx = ai_score_trends.run(ctx)
+    except Exception:
+        log.exception("collect_and_rank: ai_score_trends crashed")
+    return ctx.get("ranked_payload") or {"metadata": {}, "trends": []}
+
+
+def preview_forge(*, query: str | None = None, from_fenix: bool = False, top: int = 10) -> dict:
+    """Preview supplier matches for a query or from Fenix-ranked trends.
+
+    Args:
+        query:    Single product query to source. Mutually exclusive with from_fenix.
+        from_fenix: If True, source the top-ranked Fenix trends.
+        top:      Number of trends/queries to process.
+
+    Returns dict with ``metadata`` and ``supplier_matches``, suitable for JSON
+    serialisation or CLI pretty-printing.
+    """
+    if not query and not from_fenix:
+        raise ValueError("preview_forge requires query or from_fenix=True")
+    try:
+        ctx: dict = {}
+        if from_fenix:
+            payload = collect_and_rank()
+            trends = (payload.get("trends") or [])[:top]
+            queries = [t["topic"] for t in trends if t.get("topic")]
+            ctx["fenix_payload"] = payload
+            mode = "fenix"
+        else:
+            queries = [query] if query else []
+            mode = "query"
+
+        if not queries:
+            return {"metadata": {"mode": mode, "queries": 0}, "supplier_matches": []}
+
+        import copy as _copy
+        from el import supabase
+        supabase_ctx = {}
+        try:
+            supabase_ctx = {"supabase": supabase.default_client()}
+        except Exception:
+            pass
+
+        # Load supplier sources, run each query
+        supplier_sources = supplier_search._load_enabled_sources()
+        supplier_matches = []
+        for q in queries:
+            q_matches = []
+            for src in supplier_sources:
+                try:
+                    cands = src.search_products(q, {**ctx, **supabase_ctx})
+                    for c in (cands or []):
+                        q_matches.append({
+                            "title": c.title,
+                            "source_id": c.source_id,
+                            "supplier_product_id": c.supplier_product_id,
+                            "cost": c.cost,
+                            "shipping_cost": c.shipping_cost,
+                            "stock": c.stock,
+                            "currency": getattr(c, "currency", "USD"),
+                            "landed_cost": getattr(c, "landed_cost", None),
+                            "match_score": getattr(c, "match_score", None),
+                            "shipping_days_min": getattr(c, "shipping_days_min", None),
+                            "shipping_days_max": getattr(c, "shipping_days_max", None),
+                            "image_url": getattr(c, "image_url", None),
+                            "product_url": getattr(c, "product_url", None),
+                        })
+                except Exception:
+                    log.exception("preview_forge: source %s crashed on query %r", src.SOURCE_ID, q)
+            supplier_matches.append({"query": q, "matches": q_matches})
+
+        return {
+            "metadata": {"mode": mode, "queries": len(queries)},
+            "supplier_matches": supplier_matches,
+        }
+    except Exception:
+        log.exception("preview_forge crashed")
+        return {"metadata": {"mode": "error"}, "supplier_matches": []}
+
+
 def _forge_pipeline_enabled() -> bool:
-    """Master switch for the in-pipeline Forge→Sentinel stage (default on)."""
     return (config.get("EL_FORGE_PIPELINE_ENABLED", "true") or "").strip().lower() in {
         "1", "true", "yes", "on",
     }
 
 
-def run(initial_ctx: dict | None = None) -> dict:
-    """Execute the daily batch. Nodes are wired in order from EL.json.
+def run_for_request(request_id: str, *, db_provider=None) -> str:
+    """Run the full pipeline on behalf of an on-demand request.
 
-    ``initial_ctx`` (SP4): optional seed values placed into the ctx before any
-    node runs. Used by ``run_for_request`` to inject user-supplied niche /
-    dislikes / budget. Existing callers pass nothing and behavior is unchanged.
+    Args:
+        request_id:  Supabase row ID in the ``requests`` table.
+        db_provider: Injectable database provider (defaults to supabase).
+
+    Returns the final status string (``"running"``, ``"done"``, or ``"error"``).
     """
-    log.info("EL pipeline run start")
-    ctx: dict = dict(initial_ctx) if initial_ctx else {}
+    from el import supabase as _supabase
+    try:
+        db = db_provider or _supabase.default_client()
+        # Support both supabase table() interface and minimal FakeDB interface
+        if hasattr(db, "select_rows"):
+            rows = db.select_rows(schema="public", table="requests", filters={"id": request_id}) or []
+            if not rows:
+                raise ValueError(f"request {request_id} not found")
+            record = rows[0]
+            db.update_rows(schema="public", table="requests", filters={"id": request_id}, updates={"status": "running"})
+        else:
+            row = db.table("requests").select("*").eq("id", request_id).execute()
+            if not row.data:
+                raise ValueError(f"request {request_id} not found")
+            record = row.data[0]
+            db.table("requests").update({"status": "running"}).eq("id", request_id).execute()
+        ctx = {
+            "run_request_id": request_id,
+            "niche": record.get("niche"),
+            "budget_usd": record.get("budget_usd"),
+            "dislikes": record.get("dislikes"),
+        }
+        run(ctx)
+        if hasattr(db, "update_rows"):
+            db.update_rows(schema="public", table="requests", filters={"id": request_id}, updates={"status": "done"})
+        else:
+            db.table("requests").update({"status": "done"}).eq("id", request_id).execute()
+        return "done"
+    except ValueError:
+        raise
+    except Exception:
+        log.exception("run_for_request: %s failed", request_id)
+        try:
+            import traceback as _tb
+            err_msg = _tb.format_exc()
+            updates = {"status": "error", "error_message": err_msg}
+            if hasattr(db, "update_rows"):
+                db.update_rows(schema="public", table="requests", filters={"id": request_id}, updates=updates)
+            else:
+                db.table("requests").update(updates).eq("id", request_id).execute()
+        except Exception:
+            pass
+        return "error"
 
-    # SP2: load enabled sources into ctx["source_candidates"]. This is additive —
-    # no downstream node consumes source_candidates yet; score_rank still reads
-    # ctx["youtube_items"] populated by the YouTube source via youtube_trending.
+
+def preview_sentinel(*, query: str | None = None, from_fenix: bool = False, top: int = 10) -> dict:
+    """Preview supplier matches passed through the Sentinel vetting gate.
+
+    Args:
+        query:    Single product query to source and vet. Mutually exclusive with from_fenix.
+        from_fenix: If True, source and vet the top-ranked Fenix trends.
+        top:      Number of trends/queries to process.
+
+    Returns dict with ``metadata`` and ``sentinel_matches``.
+    """
+    if not query and not from_fenix:
+        raise ValueError("preview_sentinel requires query or from_fenix=True")
+    try:
+        # Get Forge matches first (reuse preview_forge internal logic)
+        forge_result = preview_forge(query=query, from_fenix=from_fenix, top=top)
+
+        # Run Sentinel vetting on each match
+        import copy as _copy
+        sentinel_matches = []
+        for item in forge_result.get("supplier_matches", []):
+            q = item["query"]
+            matches = item.get("matches", [])
+            # Convert dict matches back to SupplierCandidate-like objects for vetting
+            vetted = []
+            rejected = []
+            for m in matches:
+                try:
+                    from el.suppliers import SupplierCandidate
+                    cand = SupplierCandidate(
+                        title=m["title"],
+                        source_id=m["source_id"],
+                        supplier_product_id=m["supplier_product_id"],
+                        cost=m.get("cost", 0),
+                        shipping_cost=m.get("shipping_cost", 0),
+                        stock=m.get("stock", 0),
+                        currency=m.get("currency", "USD"),
+                        landed_cost=m.get("landed_cost"),
+                        match_score=m.get("match_score"),
+                        shipping_days_min=m.get("shipping_days_min"),
+                        shipping_days_max=m.get("shipping_days_max"),
+                        image_url=m.get("image_url"),
+                        product_url=m.get("product_url"),
+                    )
+                    # Convert to dict for sentinel_vetting which expects dicts with .get()
+                    cand_dict = {k: getattr(cand, k, None) for k in (
+                        "title", "source_id", "supplier_product_id", "cost", "currency",
+                        "shipping_cost", "stock", "landed_cost", "match_score",
+                        "shipping_days_min", "shipping_days_max", "image_url", "product_url",
+                    )}
+                    v_ctx = {"supplier_matches": [{"trend": {"topic": q, "rank": 1}, "query": q, "matches": [cand_dict]}]}
+                    v_ctx = sentinel_vetting.run(v_ctx)
+                    for group in v_ctx.get("sentinel_matches", []):
+                        for p in group.get("matches", []):
+                            vetted.append({
+                                "title": p.get("title"),
+                                "source_id": p.get("source_id"),
+                                "supplier_product_id": p.get("supplier_product_id"),
+                                "cost": p.get("cost"),
+                                "shipping_cost": p.get("shipping_cost"),
+                                "stock": p.get("stock"),
+                                "landed_cost": p.get("landed_cost"),
+                                "currency": p.get("currency"),
+                                "match_score": p.get("match_score"),
+                                "sentinel_score": p.get("sentinel_score"),
+                                "sentinel_decision": p.get("sentinel_decision"),
+                                "sentinel_warnings": p.get("sentinel_warnings"),
+                                "projected_sell_price": p.get("projected_sell_price"),
+                                "projected_margin_pct": p.get("projected_margin_pct"),
+                                "image_url": p.get("image_url"),
+                                "product_url": p.get("product_url"),
+                            })
+                        for r in group.get("rejected", []):
+                            rejected.append({
+                                "title": r.get("title"),
+                                "source_id": r.get("source_id"),
+                                "supplier_product_id": r.get("supplier_product_id"),
+                                "sentinel_rejection_reasons": r.get("sentinel_rejection_reasons"),
+                            })
+                except Exception:
+                    log.exception("preview_sentinel: vetting crashed for %r", m.get("title"))
+            sentinel_matches.append({
+                "query": q,
+                "matches": vetted,
+                "rejected": rejected,
+                "summary": {"evaluated": len(matches), "passed": len(vetted), "rejected": len(rejected)},
+            })
+
+        return {
+            "metadata": forge_result.get("metadata", {}),
+            "sentinel_matches": sentinel_matches,
+        }
+    except Exception:
+        log.exception("preview_sentinel crashed")
+        return {"metadata": {"mode": "error"}, "sentinel_matches": []}
+
+
+def run(ctx: dict) -> dict:
+    """Run the daily pipeline batch against *ctx*.
+
+    Steps (in order):
+
+    1. Load enabled sources, fetch trend candidates
+    2. Merge review-sources into a single review list
+    3. Score, dedupe, rank (Fenix Engine — keyword + AI)
+    4. Filter top 30 trends
+    5. Forge → Sentinel (supplier search + product vetting)
+    6. Phase-4 candidate selection (HIL queue build)
+    7. CJ product search for approved picks
+    8. Embed candidate products (pgvector)
+    9. Prepare day-sheet, sheet-rows, drive-upload, curated-picks
+    10. Curate picks, download images, prepare Telegram cards
+    11. Email digest, email product detail, notify business
+    12. Record niche performance
+    13. Upload Shopify theme + products (if store configured)
+    """
+    log.info("EL pipeline: batch start")
+
+    # ── Step 1: sources ─────────────────────────────────────────────────────
     enabled_sources = _load_enabled_sources()
     ctx["source_candidates"] = _fetch_all_sources(enabled_sources, ctx)
     log.info("EL pipeline: loaded %d candidate(s) from %d source(s)",
              len(ctx["source_candidates"]), len(enabled_sources))
 
-    if config.get("YOUTUBE_API_KEY") and not any(
-        s.SOURCE_ID == "youtube" for s in enabled_sources
-    ):
-        # YouTube was not in EL_SOURCES_ENABLED — fall back to direct call so
-        # score_rank still gets ctx["youtube_items"].
-        youtube_trending.run(ctx)
-    elif not config.get("YOUTUBE_API_KEY"):
-        log.warning("YOUTUBE_API_KEY not set — skipping YouTube Trending IN")
-
-    score_rank.run(ctx)
-
-    # Fenix engine: AI brain re-scores/re-categorizes the keyword-ranked topics with
-    # an open vocabulary (catches brand-new viral products). Fail-soft: no-op without
-    # Vertex creds or when EL_AI_SCORING_ENABLED is off — keyword scores are kept.
-    ai_score_trends.run(ctx)
-
-    # Forge + Sentinel: source supplier products for the ranked trends and vet them.
-    # Populates ctx["supplier_matches"]/["sentinel_matches"]; the passing picks are
-    # later normalized into the HIL pool alongside CJ (see normalize_sentinel_review
-    # below). Fully fail-soft and gated — a crash here never breaks the daily run, and
-    # supplier sources fail soft to [] without their own credentials.
-    if _forge_pipeline_enabled():
-        try:
-            supplier_search.run(ctx)
-            sentinel_vetting.run(ctx)
-        except Exception:
-            log.exception("Forge/Sentinel sourcing failed — continuing without vetted picks")
-
-    if config.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
-        create_day_tab.run(ctx)
-        create_curated_picks_tab.run(ctx)
-    else:
-        log.warning(
-            "GOOGLE_SERVICE_ACCOUNT_JSON not set - skipping Create Day Tab and "
-            "Create Curated Picks Tab"
-        )
-
-    prepare_sheet_rows.run(ctx)
-    prepare_json_file.run(ctx)
-
-    if config.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
-        drive_upload.run(ctx)
-    else:
-        log.warning("GOOGLE_SERVICE_ACCOUNT_JSON not set - skipping Drive Upload")
-
-    if config.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
-        write_rows_to_sheet.run(ctx)
-    else:
-        log.warning("GOOGLE_SERVICE_ACCOUNT_JSON not set - skipping Write Rows to Sheet")
-
-    filter_top_30.run(ctx)
-
-    if config.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
-        curate_picks.run(ctx)
-        build_search_query.run(ctx)
-        if ctx.get("cj_search_queries"):
-            if config.get("CJ_EMAIL") and config.get("CJ_API_KEY"):
-                cj_get_token.run(ctx)
-                cj_product_list.run(ctx)
-                pick_top_3.run(ctx)
-                if config.get("EL_EMBEDDINGS_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}:
-                    embed_candidate_products.run(ctx)
-                normalize_cj_review.run(ctx)
-                # Fold Sentinel-vetted picks into the HIL pool as a "forge_sentinel"
-                # provider, capped by phase4. No-op when the Forge stage is disabled
-                # or produced nothing; fail-soft so it never blocks the CJ review path.
-                if _forge_pipeline_enabled():
-                    try:
-                        normalize_sentinel_review.run(ctx)
-                    except Exception:
-                        log.exception("normalize_sentinel_review failed — CJ review path unaffected")
-                merge_review_sources.run(ctx)
-                phase4_candidate_selection.run(ctx)
-                stochastic_logger.run(ctx)
-                if config.get("SUPABASE_URL") and (
-                    config.get("SUPABASE_SERVICE_ROLE_KEY")
-                    or config.get("SUPABASE_SECRET_KEY")
-                    or config.get("SUPABASE_KEY")
-                ):
-                    supabase_insert_hil_reviews.run(ctx)
-                    if ctx.get("hil_review_rows"):
-                        prepare_telegram_card.run(ctx)
-                        download_product_image.run(ctx)
-                        send_hil_telegram_photo.run(ctx)
-                        mark_telegram_photo_sent.run(ctx)
-                        send_hil_telegram_text_fallback.run(ctx)
-                        mark_telegram_text_fallback.run(ctx)
-                else:
-                    log.warning("Supabase env vars not set - skipping Supabase Insert (HIL Reviews)")
-            else:
-                log.warning("CJ_EMAIL/CJ_API_KEY not set - skipping CJ Get Token")
-        if config.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
-            write_curated_picks.run(ctx)
-        else:
-            log.warning("GOOGLE_SERVICE_ACCOUNT_JSON not set - skipping Write Curated Picks")
-    else:
-        log.warning("GOOGLE_SERVICE_ACCOUNT_JSON not set - skipping Dropship AI Agent (Vertex AI)")
-
-    # SP5a: end-of-run outbound (gated by Gmail SMTP creds).
-    if config.get("GMAIL_SMTP_USER") and config.get("GMAIL_SMTP_APP_PASSWORD"):
-        email_digest.run(ctx)
-        email_product_detail.run(ctx)
-    else:
-        log.warning("GMAIL_SMTP_* not set - skipping outbound email nodes")
-
-    # SP5b: Shopify auto-store (theme + products). Gated on Shopify creds.
-    if config.get("SHOPIFY_STORE_DOMAIN") and (
-        config.get("SHOPIFY_ADMIN_API_TOKEN")
-        or (config.get("SHOPIFY_CLIENT_ID") and config.get("SHOPIFY_CLIENT_SECRET"))
-    ):
-        generate_shopify_theme.run(ctx)
-        upload_shopify_theme.run(ctx)
-        upload_shopify_products.run(ctx)
-    else:
-        log.warning("SHOPIFY_* not set - skipping Shopify auto-store")
-
-    # SP5a: business notification + dev alert (both safe with TELEGRAM bot token).
-    if config.get("TELEGRAM_HIL_BOT_TOKEN"):
-        notify_business.run(ctx)
-        if ctx.get("formatted_error"):
-            telegram_alert.run(ctx)
-    elif ctx.get("formatted_error"):
-        log.warning("TELEGRAM_HIL_BOT_TOKEN not set - skipping notify_business + telegram_alert")
-
-    # SP6: record per-niche CRM metrics at end of run (fail-soft, gated by Supabase env).
-    record_niche_performance.run(ctx)
-
-    log.info("EL pipeline run end (ctx keys: %s)", list(ctx.keys()))
-    return ctx
-
-
-def collect_and_rank(initial_ctx: dict | None = None) -> dict:
-    """Run only the Fenix front-end: fetch sources → score → AI re-score → rank.
-
-    Returns ``ctx["ranked_payload"]`` without touching any downstream node, so it
-    works with no Sheets/CJ/Supabase/Telegram credentials. Used by the ``trends``
-    preview CLI and is the cheapest way to eyeball engine output.
-    """
-    ctx: dict = dict(initial_ctx) if initial_ctx else {}
-    enabled_sources = _load_enabled_sources()
-    ctx["source_candidates"] = _fetch_all_sources(enabled_sources, ctx)
-
-    if config.get("YOUTUBE_API_KEY") and not any(
-        s.SOURCE_ID == "youtube" for s in enabled_sources
-    ):
-        youtube_trending.run(ctx)
-
-    score_rank.run(ctx)
-    ai_score_trends.run(ctx)
-    return ctx.get("ranked_payload", {"metadata": {}, "trends": []})
-
-
-def _forge_ctx(
-    *,
-    query: str | None,
-    from_fenix: bool,
-    top: int,
-    initial_ctx: dict | None,
-) -> tuple[dict, dict]:
-    """Run Forge into a fresh ctx; return ``(ctx, metadata)``.
-
-    Shared by ``preview_forge`` and ``preview_sentinel`` so both build supplier
-    matches the same way. Touches no Sheets/Supabase/Telegram/Shopify/upload node.
-    """
-    if query:
-        ctx: dict = dict(initial_ctx) if initial_ctx else {}
-        ctx["ranked_payload"] = {
-            "metadata": {"mode": "query", "total_topics": 1},
-            "trends": [{"rank": 1, "topic": query}],
-        }
-        supplier_search.run(ctx, top=1)
-        if ctx.get("supplier_matches"):
-            ctx["supplier_matches"][0]["matches"] = ctx["supplier_matches"][0]["matches"][:max(0, top)]
-        return ctx, ctx["ranked_payload"]["metadata"]
-
-    if from_fenix:
-        ranked_payload = collect_and_rank(initial_ctx=initial_ctx)
-        ctx = {"ranked_payload": ranked_payload}
-        supplier_search.run(ctx, top=top)
-        return ctx, ranked_payload.get("metadata", {})
-
-    raise ValueError("Forge preview requires query or from_fenix=True")
-
-
-def preview_forge(
-    *,
-    query: str | None = None,
-    from_fenix: bool = False,
-    top: int = 10,
-    initial_ctx: dict | None = None,
-) -> dict:
-    """Run Forge preview only: Fenix ranking if requested, then supplier search."""
-    ctx, metadata = _forge_ctx(
-        query=query, from_fenix=from_fenix, top=top, initial_ctx=initial_ctx,
-    )
-    return {"metadata": metadata, "supplier_matches": ctx.get("supplier_matches", [])}
-
-
-def preview_sentinel(
-    *,
-    query: str | None = None,
-    from_fenix: bool = False,
-    top: int = 10,
-    initial_ctx: dict | None = None,
-) -> dict:
-    """Run Forge, then the Sentinel vetting gate on top of its matches.
-
-    Preview-only and credential-free: it sources supplier candidates exactly like
-    ``preview_forge`` and adds ``sentinel_matches`` without touching the legacy
-    HIL/Shopify path. Returns both the raw Forge matches and the vetted result.
-    """
-    ctx, metadata = _forge_ctx(
-        query=query, from_fenix=from_fenix, top=top, initial_ctx=initial_ctx,
-    )
-    sentinel_vetting.run(ctx)
-    return {
-        "metadata": metadata,
-        "supplier_matches": ctx.get("supplier_matches", []),
-        "sentinel_matches": ctx.get("sentinel_matches", []),
-    }
-
-
-def run_for_request(request_id: str, *, db_provider=None) -> str:
-    """SP4: run the pipeline for a user-submitted request row.
-
-    Reads the row from ``private.run_requests``, marks it ``running``, seeds
-    ctx with the user-supplied niche/dislikes/budget, calls ``run()``, and
-    marks the row ``done`` or ``error``. Returns the final status.
-    """
-    from el.supabase import SupabaseRestProvider
-    from el.web import run_service
-
-    db = db_provider or SupabaseRestProvider()
-    row = run_service.get_run(request_id=request_id, db_provider=db)
-    if row is None:
-        raise ValueError(f"run_request {request_id} not found")
-
-    run_service.mark_running(
-        request_id=request_id, pipeline_run_id=None, db_provider=db,
-    )
+    # ── Step 2: merge review sources ────────────────────────────────────────
     try:
-        initial_ctx = {
-            "niche": row.get("niche"),
-            "dislikes": row.get("dislikes"),
-            "budget_usd": row.get("budget_usd"),
-            "run_request_id": request_id,
-        }
-        run(initial_ctx=initial_ctx)
-    except Exception as exc:
-        run_service.mark_error(
-            request_id=request_id, error_message=str(exc), db_provider=db,
-        )
-        return "error"
+        ctx = merge_review_sources.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: merge_review_sources crashed")
+        ctx["review_sources"] = ctx.get("review_sources", [])
 
-    run_service.mark_done(request_id=request_id, db_provider=db)
-    return "done"
+    # ── Step 3: score, dedupe, rank (Fenix Engine) ──────────────────────────
+    try:
+        ctx = score_rank.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: score_rank crashed")
+    try:
+        ctx = ai_score_trends.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: ai_score_trends crashed")
+
+    # ── Step 4: filter top 30 ────────────────────────────────────────────────
+    try:
+        ctx = filter_top_30.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: filter_top_30 crashed")
+        ctx["top_trends"] = ctx.get("top_trends", [])
+
+    # ── Step 5: Forge → Sentinel ═══════════════════════════════════════════
+    forge_pipeline = (config.get("EL_FORGE_PIPELINE_ENABLED", "true") or "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    if forge_pipeline:
+        try:
+            ctx = supplier_search.run(ctx)
+        except Exception:
+            log.exception("EL pipeline: supplier_search crashed")
+        try:
+            ctx = sentinel_vetting.run(ctx)
+        except Exception:
+            log.exception("EL pipeline: sentinel_vetting crashed")
+        # Normalize passing Sentinel matches into HIL review rows so they feed
+        # into phase4_candidate_selection alongside CJ/browserbase candidates.
+        try:
+            ctx = normalize_sentinel_review.run(ctx)
+        except Exception:
+            log.exception("EL pipeline: normalize_sentinel_review crashed")
+        # Re-merge review sources so sentinel_review_items are included.
+        try:
+            ctx = merge_review_sources.run(ctx)
+        except Exception:
+            log.exception("EL pipeline: merge_review_sources (re-merge) crashed")
+    else:
+        log.info("EL pipeline: Forge pipeline disabled — skipping supplier_search + sentinel_vetting")
+
+    # ── Step 6: Phase-4 candidate selection ─────────────────────────────────
+    try:
+        ctx = phase4_candidate_selection.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: phase4_candidate_selection crashed")
+
+    # ── Step 7: CJ product search ────────────────────────────────────────────
+    try:
+        ctx = cj_get_token.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: cj_get_token crashed")
+    try:
+        ctx = cj_product_list.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: cj_product_list crashed")
+
+    # ── Step 8: Embed candidates ─────────────────────────────────────────────
+    try:
+        ctx = embed_candidate_products.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: embed_candidate_products crashed")
+
+    # ── Step 9: Sheets + Drive ───────────────────────────────────────────────
+    try:
+        ctx = create_day_tab.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: create_day_tab crashed")
+    try:
+        ctx = prepare_sheet_rows.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: prepare_sheet_rows crashed")
+    try:
+        ctx = prepare_json_file.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: prepare_json_file crashed")
+    try:
+        ctx = write_rows_to_sheet.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: write_rows_to_sheet crashed")
+    try:
+        ctx = drive_upload.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: drive_upload crashed")
+    try:
+        ctx = create_curated_picks_tab.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: create_curated_picks_tab crashed")
+
+    # ── Step 10: Curate picks → search queries → Telegram ────────────────────
+    try:
+        ctx = curate_picks.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: curate_picks crashed")
+    try:
+        ctx = build_search_query.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: build_search_query crashed")
+    try:
+        ctx = write_curated_picks.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: write_curated_picks crashed")
+    try:
+        ctx = download_product_image.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: download_product_image crashed")
+    try:
+        ctx = prepare_telegram_card.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: prepare_telegram_card crashed")
+
+    # ── Step 11: Outbound (email + notify) ────────────────────────────────────
+    try:
+        ctx = email_digest.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: email_digest crashed")
+    try:
+        ctx = email_product_detail.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: email_product_detail crashed")
+    try:
+        ctx = notify_business.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: notify_business crashed")
+
+    # ── Step 12: Record niche performance ────────────────────────────────────
+    try:
+        ctx = record_niche_performance.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: record_niche_performance crashed")
+
+    # ── Step 13: Shopify ─────────────────────────────────────────────────────
+    try:
+        ctx = generate_shopify_theme.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: generate_shopify_theme crashed")
+    try:
+        ctx = upload_shopify_theme.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: upload_shopify_theme crashed")
+    try:
+        ctx = upload_shopify_products.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: upload_shopify_products crashed")
+
+    log.info("EL pipeline: batch done")
+    return ctx

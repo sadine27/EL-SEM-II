@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
+from urllib.parse import urlsplit, urlunsplit
 
 from el import config
 from el.logger import get_logger
@@ -90,6 +91,40 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+
+def _llm_with_retry(provider, system: str, prompt: str, max_retries: int = 2) -> str | None:
+    """Call provider.generate with simple retry + exponential backoff."""
+    import time as _time
+    last_exc = None
+    for attempt in range(max_retries + 1):
+        try:
+            return provider.generate(system, prompt)
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries:
+                wait = (attempt + 1) * 2.0
+                log.warning(
+                    "ai_trend_discovery: retry %d/%d after %s in %.1fs",
+                    attempt + 1, max_retries, exc, wait,
+                )
+                _time.sleep(wait)
+    log.warning("ai_trend_discovery: LLM call failed after %d retries (%s) — EMPTY", max_retries, last_exc)
+    return None
+
+
+def _normalize_url(url: str) -> str:
+    """Normalize URL for consistent matching: strip trailing slash, default to https."""
+    url = (url or "").strip().rstrip("/")
+    if not url:
+        return ""
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    try:
+        parts = urlsplit(url)
+        return urlunsplit((parts.scheme, parts.netloc.lower(), parts.path or "", "", ""))
+    except Exception:
+        return url
+
 def _grounding_headlines(ctx: dict) -> list[str]:
     """Pull titles from feed candidates already collected this run, if any."""
     cands = ctx.get("source_candidates") or []
@@ -115,7 +150,7 @@ def _gather_web_evidence(tavily, queries: list[str]) -> tuple[list[dict], set[st
         if res.get("answer"):
             snippets.append({"query": q, "answer": res["answer"]})
         for r in res.get("results", []):
-            url = (r.get("url") or "").strip()
+            url = _normalize_url(r.get("url") or "")
             if url:
                 valid_urls.add(url)
             snippets.append({
@@ -189,10 +224,8 @@ def fetch_trends(ctx: dict, *, tavily=None, provider=None) -> list[TrendCandidat
         return []
 
     headlines = _grounding_headlines(ctx)
-    try:
-        raw = provider.generate(_SYSTEM, _build_user_prompt(snippets, headlines))
-    except Exception as exc:
-        log.warning("ai_trend_discovery: LLM call failed (%s) — EMPTY", exc)
+    raw = _llm_with_retry(provider, _SYSTEM, _build_user_prompt(snippets, headlines))
+    if raw is None:
         return []
 
     products = _parse_products(raw)
@@ -204,7 +237,7 @@ def fetch_trends(ctx: dict, *, tavily=None, provider=None) -> list[TrendCandidat
     dropped_no_cite = 0
     for obj in products:
         name = str(obj.get("product") or "").strip()
-        url = str(obj.get("source_url") or "").strip()
+        url = _normalize_url(str(obj.get("source_url") or ""))
         if not name or name.lower() in seen:
             continue
         # Anti-hallucination: candidate must cite a URL that came from the evidence.

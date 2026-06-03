@@ -49,7 +49,6 @@ def test_trend_to_agent_parse_chain(monkeypatch):
             {"snippet": {"title": "Movie Trailer", "tags": ["video"]}},
         ]
     }))
-    monkeypatch.setattr(score_rank, "fetch_trends_rss", lambda: [])
     monkeypatch.setattr(score_rank, "fetch_news_rss", lambda: [])
 
     ctx: dict = {}

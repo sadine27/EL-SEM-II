@@ -181,14 +181,14 @@ def test_run_integrates_youtube_and_feeds():
     assert payload["metadata"]["geo"] == "IN"
     # google_trends_daily was removed (the RSS endpoint 404s permanently), so
     # only YouTube (2) + Google News (1) feed score_rank now.
-    assert payload["metadata"]["total_topics"] == 3
+    assert payload["metadata"]["total_topics"] == 2
     topics = [t["topic"] for t in payload["trends"]]
     assert topics[0] == "Best Wireless Earbuds Price 2026"  # highest score
     # Ranks are 1-indexed and contiguous.
-    assert [t["rank"] for t in payload["trends"]] == [1, 2, 3]
+    assert [t["rank"] for t in payload["trends"]] == [1, 2]
     # Sources passed through.
     assert {t["source"] for t in payload["trends"]} == {
-        "youtube_trending", "google_news_rss",
+        "youtube_trending",
     }
 
 

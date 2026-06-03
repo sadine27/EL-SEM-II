@@ -2,13 +2,12 @@
   "mcpServers": {
     "supabase": {
       "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=uatwossszmysixovsdjr&features=database,docs,debugging,development"
+      "url": "https://mcp.supabase.com/mcp?project_ref=awunuxtcedllzkkisqtc&features=database,docs,debugging,development",
+      "headers": {
+        "Authorization": "Bearer ${SUPABASE_ACCESS_TOKEN}"
+      }
     },
-    "n8n-mcp": {
-      "type": "http",
-      "url": "https://divyesh-sharma.app.n8n.cloud/mcp-server/http"
-    },
-    "github": {
+    "github.com/github/github-mcp-server": {
       "command": "docker",
       "args": [
         "run",
@@ -16,8 +15,7 @@
         "--rm",
         "-e",
         "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "ghcr.io/github/github-mcp-server",
-        "stdio"
+        "ghcr.io/github/github-mcp-server"
       ],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"

@@ -20,6 +20,8 @@ class SupplierCandidate:
     stock: int | None = None
     moq: int | None = None
     rating: float | None = None
+    landed_cost: float | None = None
+    match_score: float | None = None
     raw_payload: dict[str, Any] = field(default_factory=dict)
 
 

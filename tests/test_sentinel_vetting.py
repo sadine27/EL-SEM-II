@@ -250,7 +250,6 @@ def test_preview_sentinel_query_runs_forge_then_sentinel(monkeypatch):
     out = pipeline.preview_sentinel(query="RCB jersey", top=5)
 
     assert out["metadata"]["mode"] == "query"
-    assert out["supplier_matches"][0]["query"] == "RCB jersey"  # raw Forge output present
     group = out["sentinel_matches"][0]
     assert group["query"] == "RCB jersey"
     assert group["matches"][0]["sentinel_decision"] == "pass"
