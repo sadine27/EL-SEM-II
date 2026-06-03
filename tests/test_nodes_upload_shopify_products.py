@@ -54,8 +54,8 @@ def test_all_picks_succeed_sets_store_url():
         "request_id": "r-1",
         "niche": "yoga",
         "hil_review_rows": [
-            {"product_name": "Mat", "price_text": "29.99", "image_url": "https://x/img.jpg"},
-            {"product_name": "Block", "price_numeric": 12, "description": "Cork block"},
+            {"product_name": "Mat", "price_text": "29.99", "image_url": "https://x/img.jpg", "approval_status": "approved"},
+            {"product_name": "Block", "price_numeric": 12, "description": "Cork block", "approval_status": "approved"},
         ],
     }
     shop = FakeShopify()
@@ -78,7 +78,7 @@ def test_all_picks_succeed_sets_store_url():
 def test_partial_failure_aggregates_and_still_sets_url():
     ctx = {
         "request_id": "r-2",
-        "hil_review_rows": [{"product_name": "Good"}, {"product_name": "Bad"}],
+        "hil_review_rows": [{"product_name": "Good", "approval_status": "approved"}, {"product_name": "Bad", "approval_status": "approved"}],
     }
     shop = FakeShopify(fail_names={"Bad"})
     upload_shopify_products.run(ctx, provider=shop)
@@ -92,7 +92,7 @@ def test_partial_failure_aggregates_and_still_sets_url():
 def test_all_failures_no_store_url():
     ctx = {
         "request_id": "r-3",
-        "hil_review_rows": [{"product_name": "BadOnly"}],
+        "hil_review_rows": [{"product_name": "BadOnly", "approval_status": "approved"}],
     }
     shop = FakeShopify(fail_names={"BadOnly"})
     upload_shopify_products.run(ctx, provider=shop)
@@ -126,8 +126,8 @@ def test_hil_rows_without_product_name_are_skipped():
     """HIL rows lacking product_name (e.g. YouTube-title topic rows) are never uploaded."""
     ctx = {
         "hil_review_rows": [
-            {"product_name": "Real CJ Product", "price_text": "19.99"},
-            {"source_topic": "YouTube Title | Official Video", "price_text": "9.99"},
+            {"product_name": "Real CJ Product", "price_text": "19.99", "approval_status": "approved"},
+            {"source_topic": "YouTube Title | Official Video", "price_text": "9.99", "approval_status": "approved"},
         ],
     }
     shop = FakeShopify()
@@ -136,10 +136,26 @@ def test_hil_rows_without_product_name_are_skipped():
     assert shop.created[0][0]["product"]["title"] == "Real CJ Product"
 
 
+def test_pending_and_rejected_hil_rows_not_uploaded():
+    """Only approved rows reach Shopify — pending/rejected/no-status are blocked."""
+    ctx = {
+        "hil_review_rows": [
+            {"product_name": "Pending", "approval_status": "pending"},
+            {"product_name": "Rejected", "approval_status": "rejected"},
+            {"product_name": "No Status"},
+            {"product_name": "Approved", "approval_status": "approved"},
+        ],
+    }
+    shop = FakeShopify()
+    upload_shopify_products.run(ctx, provider=shop)
+    assert len(shop.created) == 1
+    assert shop.created[0][0]["product"]["title"] == "Approved"
+
+
 def test_clears_existing_products_before_upload():
     """Each run deletes old products first so stale picks never accumulate."""
     ctx = {
-        "hil_review_rows": [{"product_name": "Mat", "price_text": "29.99"}],
+        "hil_review_rows": [{"product_name": "Mat", "price_text": "29.99", "approval_status": "approved"}],
     }
     shop = FakeShopify()
     upload_shopify_products.run(ctx, provider=shop)
@@ -159,8 +175,8 @@ def test_second_run_clears_and_replaces_all_products():
     ctx = {
         "niche": "yoga",
         "hil_review_rows": [
-            {"product_name": "Mat", "price_text": "29.99"},
-            {"product_name": "Block", "price_numeric": 12},
+            {"product_name": "Mat", "price_text": "29.99", "approval_status": "approved"},
+            {"product_name": "Block", "price_numeric": 12, "approval_status": "approved"},
         ],
     }
     shop = FakeShopify()

@@ -25,9 +25,13 @@ def _slug(text: str) -> str:
 
 def _picks(ctx: dict) -> list[dict]:
     hil = ctx.get("hil_review_rows")
-    if hil:
-        # HIL path: only upload rows that have a real supplier product name
-        return [r for r in hil if isinstance(r, dict) and r.get("product_name")]
+    if hil is not None:
+        # HIL path: only upload rows that were explicitly approved by the human reviewer.
+        # pending/rejected rows must never reach Shopify.
+        return [
+            r for r in hil
+            if isinstance(r, dict) and r.get("product_name") and r.get("approval_status") == "approved"
+        ]
     # Fallback: curated_picks when HIL is disabled (topic title is acceptable)
     rows = ctx.get("curated_picks") or []
     return [r for r in rows if isinstance(r, dict)]
@@ -84,6 +88,34 @@ def _clear_existing_products(provider: shopify.ShopifyAdminProvider) -> None:
         log.info("upload_shopify_products: cleared %d existing product(s)", len(products))
     except Exception:
         log.exception("upload_shopify_products: clear step failed — continuing with upload")
+
+
+def create_one(
+    row: dict,
+    *,
+    niche: str = "",
+    provider: shopify.ShopifyAdminProvider | None = None,
+) -> dict:
+    """Create a single Shopify product for an approved HIL review row.
+
+    Does NOT clear existing products — used by the HIL poller callback path
+    to add a product the moment it is approved, rather than in the batch run.
+    """
+    if provider is None:
+        try:
+            provider = shopify.default_provider()
+        except Exception as exc:
+            log.warning("upload_shopify_products.create_one: provider init failed: %s", exc)
+            return {"ok": False, "error": str(exc)}
+    name = _name(row)
+    handle = _slug(name)
+    try:
+        product = provider.create_product(_payload(row, niche=niche), idempotency_key=handle)
+        log.info("upload_shopify_products.create_one: created %s (id=%s)", name, product.get("id"))
+        return {"ok": True, "pick_name": name, "handle": handle, "product_id": product.get("id")}
+    except Exception as exc:
+        log.warning("upload_shopify_products.create_one: %s failed: %s", name, exc)
+        return {"ok": False, "pick_name": name, "handle": handle, "error": str(exc)}
 
 
 def run(ctx: dict, *, provider: shopify.ShopifyAdminProvider | None = None) -> dict:

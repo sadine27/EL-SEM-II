@@ -50,6 +50,49 @@ def _get_updates(token: str, offset: int, timeout: int) -> list[dict]:
     return payload.get("result") or []
 
 
+def _upload_approved_to_shopify(item: dict) -> None:
+    """Best-effort: push the just-approved product to Shopify.
+
+    Queries Supabase for the full review row (price, image, description) then
+    calls create_one — which adds the product without clearing the store.
+    Never blocks the callback flow; all exceptions are swallowed.
+    """
+    review_id = item.get("review_id")
+    if not review_id:
+        return
+    try:
+        from el import config
+        from el.supabase import HIL_REVIEWS_SCHEMA, HIL_REVIEWS_TABLE, SupabaseRestProvider
+        from el.nodes import upload_shopify_products
+
+        if not config.get("SHOPIFY_STORE_DOMAIN"):
+            return
+        rows = SupabaseRestProvider().select_rows(
+            schema=HIL_REVIEWS_SCHEMA,
+            table=HIL_REVIEWS_TABLE,
+            filters={"id": f"eq.{review_id}"},
+            limit=1,
+        )
+        if not rows:
+            log.warning("HIL poller: approved review %s not found in Supabase", review_id)
+            return
+        result = upload_shopify_products.create_one(rows[0])
+        if result["ok"]:
+            log.info(
+                "HIL poller: uploaded approved product %r to Shopify (id=%s)",
+                result.get("pick_name"),
+                result.get("product_id"),
+            )
+        else:
+            log.warning(
+                "HIL poller: Shopify upload failed for review %s: %s",
+                review_id,
+                result.get("error"),
+            )
+    except Exception:
+        log.exception("HIL poller: Shopify upload for approved review %s failed — best-effort", review_id)
+
+
 def _process_batch(updates: list[dict]) -> None:
     ctx: dict = {"telegram_updates": updates}
     parse_hil_callback.run(ctx)
@@ -59,6 +102,8 @@ def _process_batch(updates: list[dict]) -> None:
     for item in ctx.get("hil_finalized_callbacks") or []:
         edit_hil_message.run({"hil_finalized_callbacks": item})
         send_hil_fx.run({"hil_finalized_callbacks": item})
+        if item.get("approval_status") == "approved":
+            _upload_approved_to_shopify(item)
 
 
 def poll_loop(*, stop: threading.Event, token: str | None = None) -> None:
