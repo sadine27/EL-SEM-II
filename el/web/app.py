@@ -20,6 +20,7 @@ from el.web.routes.crm import router as crm_router
 from el.web.routes.health import router as health_router
 from el.web.routes.pages import router as pages_router
 from el.web.routes.runs import router as runs_router
+from el.web.routes.sentinel import router as sentinel_router
 from el.web.settings import Settings
 
 
@@ -63,5 +64,6 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
     app.include_router(chat_router)
     app.include_router(crm_router)
     app.include_router(pages_router)
+    app.include_router(sentinel_router)
 
     return app

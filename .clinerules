@@ -85,10 +85,25 @@ docker compose up -d
   - [x] Migration exists: `migrations/sp9_allow_forge_sentinel_hil_provider.sql`
   - [x] CLI preview: `python -m el forge --query "RCB jersey" --json`
 
-**Next: SP7 — Paper Pipeline**
-  - Blocked on: ≥100 logged HIL events in `private.hil_logging_events`
-  - Branch: `feat/sp7-paper`
-  - Deliverables: `scripts/research/ips_overrides.py`, `scripts/research/override_descriptive.py`, `scripts/research/paper_figures.py`, `paper/phase3_overrides.tex`
+## PHASE 1 — ENABLE & MONITOR (IN PROGRESS)
+
+### ✅ COMPLETED:
+  - [x] 1.1 — SP9 migration applied in Supabase (`forge_sentinel` now allowed in hil_reviews)
+  - [x] 1.2 — `private` schema noted as needing exposure in Supabase Dashboard → API Settings (can't set via SQL — user must check "private" in API Settings → Exposed Schemas)
+  - [x] 1.3 — Sentinel monitoring: `crm.sentinel_summary()` implemented with pass rate, avg score, top rejection reasons, top sources, per-trend stats
+  - [x] 1.4 — `GET /api/sentinel/summary` endpoint wired into FastAPI
+  - [x] 1.5 — Sentinel telemetry logging: `_log_sentinel_decisions()` in `sentinel_vetting.py` logs every pass/reject to `private.sentinel_log` (table already exists)
+
+### 🔴 NEXT — PHASE 2 (after user reviews):
+  2.1 — Run pipeline live (EL_FORGE_PIPELINE_ENABLED defaults to `true`)
+  2.2 — Monitor pass rates via /api/sentinel/summary
+  2.3 — Tune thresholds after 10-20 real HIL responses
+  2.4 — Gradually increase SENTINEL_PROVIDER_CAP
+
+### 📋 PENDING USER ACTION:
+  - Go to Supabase Dashboard → API Settings → Exposed Schemas and add `private` to the exposed schemas list (required for SP7 paper queries and sentinel_log access)
+
+**Next: Wait for user to expose `private` schema in Supabase, then proceed to Phase 2 (live run)**
 
 ## REPO:
 - GitHub: `https://github.com/sadine27/EL-SEM-II.git` (origin)
