@@ -385,6 +385,16 @@ def run(ctx: dict) -> dict:
     """
     log.info("EL pipeline: batch start")
 
+    # ── Step 0: Clear old Shopify products before the run ────────────────────
+    if config.get("SHOPIFY_STORE_DOMAIN"):
+        try:
+            from el.nodes.upload_shopify_products import _clear_existing_products
+            from el import shopify as _shopify
+            _clear_existing_products(_shopify.default_provider())
+            log.info("EL pipeline: cleared old Shopify products")
+        except Exception:
+            log.exception("EL pipeline: Shopify clear on startup failed — continuing")
+
     # ── Step 1: sources ─────────────────────────────────────────────────────
     enabled_sources = _load_enabled_sources()
     ctx["source_candidates"] = _fetch_all_sources(enabled_sources, ctx)
@@ -448,6 +458,16 @@ def run(ctx: dict) -> dict:
     except Exception:
         log.exception("EL pipeline: phase4_candidate_selection crashed")
 
+    # ── Step 6b: Stochastic logger + HIL reviews insert ─────────────────────
+    try:
+        ctx = stochastic_logger.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: stochastic_logger crashed")
+    try:
+        ctx = supabase_insert_hil_reviews.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: supabase_insert_hil_reviews crashed")
+
     # ── Step 7: CJ product search ────────────────────────────────────────────
     try:
         ctx = cj_get_token.run(ctx)
@@ -504,13 +524,29 @@ def run(ctx: dict) -> dict:
     except Exception:
         log.exception("EL pipeline: write_curated_picks crashed")
     try:
+        ctx = prepare_telegram_card.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: prepare_telegram_card crashed")
+    try:
         ctx = download_product_image.run(ctx)
     except Exception:
         log.exception("EL pipeline: download_product_image crashed")
     try:
-        ctx = prepare_telegram_card.run(ctx)
+        ctx = send_hil_telegram_photo.run(ctx)
     except Exception:
-        log.exception("EL pipeline: prepare_telegram_card crashed")
+        log.exception("EL pipeline: send_hil_telegram_photo crashed")
+    try:
+        ctx = mark_telegram_photo_sent.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: mark_telegram_photo_sent crashed")
+    try:
+        ctx = send_hil_telegram_text_fallback.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: send_hil_telegram_text_fallback crashed")
+    try:
+        ctx = mark_telegram_text_fallback.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: mark_telegram_text_fallback crashed")
 
     # ── Step 11: Outbound (email + notify) ────────────────────────────────────
     try:

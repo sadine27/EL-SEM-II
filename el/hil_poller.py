@@ -50,47 +50,63 @@ def _get_updates(token: str, offset: int, timeout: int) -> list[dict]:
     return payload.get("result") or []
 
 
-def _upload_approved_to_shopify(item: dict) -> None:
-    """Best-effort: push the just-approved product to Shopify.
+def _upload_approved_to_shopify(_item: dict) -> None:
+    """Best-effort: sync ALL approved products to Shopify after any approval.
 
-    Queries Supabase for the full review row (price, image, description) then
-    calls create_one — which adds the product without clearing the store.
+    Clears the store first, then re-uploads every approved row from Supabase
+    so the store always shows exactly the approved set with no garbage left over.
     Never blocks the callback flow; all exceptions are swallowed.
     """
-    review_id = item.get("review_id")
-    if not review_id:
-        return
     try:
-        from el import config
+        from el import shopify
         from el.supabase import HIL_REVIEWS_SCHEMA, HIL_REVIEWS_TABLE, SupabaseRestProvider
-        from el.nodes import upload_shopify_products
+        from el.nodes.upload_shopify_products import _clear_existing_products, create_one
 
         if not config.get("SHOPIFY_STORE_DOMAIN"):
             return
-        rows = SupabaseRestProvider().select_rows(
+
+        db = SupabaseRestProvider()
+        approved_rows = db.select_rows(
             schema=HIL_REVIEWS_SCHEMA,
             table=HIL_REVIEWS_TABLE,
-            filters={"id": f"eq.{review_id}"},
-            limit=1,
+            filters={"approval_status": "eq.approved", "order": "reviewed_at.desc"},
+            limit=100,
         )
-        if not rows:
-            log.warning("HIL poller: approved review %s not found in Supabase", review_id)
-            return
-        result = upload_shopify_products.create_one(rows[0])
-        if result["ok"]:
-            log.info(
-                "HIL poller: uploaded approved product %r to Shopify (id=%s)",
-                result.get("pick_name"),
-                result.get("product_id"),
-            )
-        else:
-            log.warning(
-                "HIL poller: Shopify upload failed for review %s: %s",
-                review_id,
-                result.get("error"),
-            )
+        if not approved_rows:
+            log.info("HIL poller: no approved products — clearing store")
+
+        # Deduplicate by product_url, keep most-recently-approved copy
+        seen: set[str] = set()
+        unique: list[dict] = []
+        for row in approved_rows:
+            key = row.get("product_url") or row.get("product_name") or ""
+            if key and key not in seen:
+                seen.add(key)
+                unique.append(row)
+
+        provider = shopify.default_provider()
+        _clear_existing_products(provider)
+
+        ok = 0
+        for row in unique:
+            result = create_one(row, provider=provider)
+            if result["ok"]:
+                ok += 1
+                log.info(
+                    "HIL poller: uploaded %r (id=%s)",
+                    result.get("pick_name"),
+                    result.get("product_id"),
+                )
+            else:
+                log.warning(
+                    "HIL poller: upload failed for %r: %s",
+                    result.get("pick_name"),
+                    result.get("error"),
+                )
+
+        log.info("HIL poller: Shopify sync complete — %d/%d uploaded", ok, len(unique))
     except Exception:
-        log.exception("HIL poller: Shopify upload for approved review %s failed — best-effort", review_id)
+        log.exception("HIL poller: Shopify sync failed — best-effort")
 
 
 def _process_batch(updates: list[dict]) -> None:
@@ -120,6 +136,10 @@ def poll_loop(*, stop: threading.Event, token: str | None = None) -> None:
 
     offset = 0
     log.info("HIL poller starting (long-poll timeout=%ds)", _LONG_POLL_TIMEOUT)
+
+    # Sync approved products to Shopify on every startup so the store is
+    # always correct after a Docker restart without needing a manual script.
+    _upload_approved_to_shopify({})
 
     while not stop.is_set():
         try:
