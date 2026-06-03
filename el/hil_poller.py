@@ -50,6 +50,65 @@ def _get_updates(token: str, offset: int, timeout: int) -> list[dict]:
     return payload.get("result") or []
 
 
+def _upload_approved_to_shopify(_item: dict) -> None:
+    """Best-effort: sync ALL approved products to Shopify after any approval.
+
+    Clears the store first, then re-uploads every approved row from Supabase
+    so the store always shows exactly the approved set with no garbage left over.
+    Never blocks the callback flow; all exceptions are swallowed.
+    """
+    try:
+        from el import shopify
+        from el.supabase import HIL_REVIEWS_SCHEMA, HIL_REVIEWS_TABLE, SupabaseRestProvider
+        from el.nodes.upload_shopify_products import _clear_existing_products, create_one
+
+        if not config.get("SHOPIFY_STORE_DOMAIN"):
+            return
+
+        db = SupabaseRestProvider()
+        approved_rows = db.select_rows(
+            schema=HIL_REVIEWS_SCHEMA,
+            table=HIL_REVIEWS_TABLE,
+            filters={"approval_status": "eq.approved", "order": "reviewed_at.desc"},
+            limit=100,
+        )
+        if not approved_rows:
+            log.info("HIL poller: no approved products — clearing store")
+
+        # Deduplicate by product_url, keep most-recently-approved copy
+        seen: set[str] = set()
+        unique: list[dict] = []
+        for row in approved_rows:
+            key = row.get("product_url") or row.get("product_name") or ""
+            if key and key not in seen:
+                seen.add(key)
+                unique.append(row)
+
+        provider = shopify.default_provider()
+        _clear_existing_products(provider)
+
+        ok = 0
+        for row in unique:
+            result = create_one(row, provider=provider)
+            if result["ok"]:
+                ok += 1
+                log.info(
+                    "HIL poller: uploaded %r (id=%s)",
+                    result.get("pick_name"),
+                    result.get("product_id"),
+                )
+            else:
+                log.warning(
+                    "HIL poller: upload failed for %r: %s",
+                    result.get("pick_name"),
+                    result.get("error"),
+                )
+
+        log.info("HIL poller: Shopify sync complete — %d/%d uploaded", ok, len(unique))
+    except Exception:
+        log.exception("HIL poller: Shopify sync failed — best-effort")
+
+
 def _process_batch(updates: list[dict]) -> None:
     ctx: dict = {"telegram_updates": updates}
     parse_hil_callback.run(ctx)
@@ -59,6 +118,8 @@ def _process_batch(updates: list[dict]) -> None:
     for item in ctx.get("hil_finalized_callbacks") or []:
         edit_hil_message.run({"hil_finalized_callbacks": item})
         send_hil_fx.run({"hil_finalized_callbacks": item})
+        if item.get("approval_status") == "approved":
+            _upload_approved_to_shopify(item)
 
 
 def poll_loop(*, stop: threading.Event, token: str | None = None) -> None:
@@ -75,6 +136,10 @@ def poll_loop(*, stop: threading.Event, token: str | None = None) -> None:
 
     offset = 0
     log.info("HIL poller starting (long-poll timeout=%ds)", _LONG_POLL_TIMEOUT)
+
+    # Sync approved products to Shopify on every startup so the store is
+    # always correct after a Docker restart without needing a manual script.
+    _upload_approved_to_shopify({})
 
     while not stop.is_set():
         try:

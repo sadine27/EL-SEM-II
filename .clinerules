@@ -1,68 +1,68 @@
 # EL-SEM-II Project Memory — DIVYESH SHARMA — PROJECT DUE: JUNE 4, 2026 (TOMORROW)
 
-## \u26a1 CRITICAL: URGENCY LEVEL MAXIMUM
+## ⚡ CRITICAL: URGENCY LEVEL MAXIMUM
 The project deadline is **TOMORROW (June 4, 2026)**. Every session must immediately resume work on the highest-priority unfinished items. Do NOT spend time re-exploring file structures or re-reading docs unless absolutely necessary. Jump straight into the next action.
 
 ## WHAT THIS PROJECT IS
 - **EL Python Port**: Faithful Python port of n8n workflows (`legacy/EL.json`) for e-commerce product discovery + HIL (Human-in-the-Loop) pipeline
-- **Phase 3 SaaS**: Full end-to-end SaaS build (SP1\u2013SP9)
+- **Phase 3 SaaS**: Full end-to-end SaaS build (SP1–SP9)
 - **Stack**: Python 3.12, Supabase/PostgreSQL+pgvector, Vertex AI/Gemini, Docker, FastAPI, n8n
 - **Deployed**: Docker Compose on laptop + Cloudflare Quick Tunnel. `/healthz` green.
 
-## CURRENT STATUS — June 3, 2026 (10:00 PM)
+## CURRENT STATUS — June 3, 2026 (11:40 PM)
 
-### \u2705 MERGED TO MAIN (SP1\u2013SP9):
+### ✅ MERGED TO MAIN (SP1–SP9):
 | SP | Status | Key deliverable |
 |----|--------|-----------------|
-| SP1 | \u2705 | Telemetry foundation (433 tests) |
-| SP2 | \u2705 | Source expansion |
-| SP3 | \u2705 | Vision + pgvector embeddings |
-| SP4 | \u2705 | FastAPI + RAG chat bot (555 tests) |
-| SP5 | \u2705 | Outbound: Gmail SMTP + Shopify auto-store (602 tests) |
-| SP6 | \u2705 | CRM minimal: supplier/dispute/niche tables + dashboard (661 tests) |
-| SP8 | \u2705 | Docker + Laptop deploy verified (652/652 green + 1 opt-in skipped) |
-| SP9 | \u2705 | Forge + Sentinel HIL Provider \u2014 Phase 1 complete, PR #24 merged \u2192 main; Phase 2 live test in progress |
+| SP1 | ✅ | Telemetry foundation (433 tests) |
+| SP2 | ✅ | Source expansion |
+| SP3 | ✅ | Vision + pgvector embeddings |
+| SP4 | ✅ | FastAPI + RAG chat bot (555 tests) |
+| SP5 | ✅ | Outbound: Gmail SMTP + Shopify auto-store (602 tests) |
+| SP6 | ✅ | CRM minimal: supplier/dispute/niche tables + dashboard (661 tests) |
+| SP8 | ✅ | Docker + Laptop deploy verified (652/652 green + 1 opt-in skipped) |
+| SP9 | ✅ | Forge + Sentinel HIL Provider — Phase 1 complete, PR #24 merged → main; Phase 2 live test in progress |
 
-### \u2b1c PENDING \u2014 SP7 (Paper Pipeline):
-- **Blocked on**: \u2265100 logged HIL events in `private.hil_logging_events`
+### ⬜ PENDING — SP7 (Paper Pipeline):
+- **Blocked on**: ≥100 logged HIL events in `private.hil_logging_events`
 - Branch: `feat/sp7-paper`
 - Deliverables: `scripts/research/ips_overrides.py`, `scripts/research/override_descriptive.py`, `scripts/research/paper_figures.py`, `paper/phase3_overrides.tex`
 
-### \U0001f7e1 PENDING SUPABASE ACTIONS:
-- Expose `private` schema in Supabase Dashboard \u2192 API Settings \u2192 Exposed Schemas (for sentinel_log telemetry and SP7 queries)
+### 🟡 PENDING SUPABASE ACTIONS:
+- Expose `private` schema in Supabase Dashboard → API Settings → Exposed Schemas (for sentinel_log telemetry and SP7 queries)
 
-### \U0001f7e1 PENDING PRODUCTION SMOKE:
+### 🟡 PENDING PRODUCTION SMOKE:
 - SP5 production smoke: Gmail app password + Shopify dev store + live send/upload
 - POST /api/runs smoke
 
 ## PROJECT STRUCTURE KEY:
-- `el/` \u2014 core Python package (pipeline, nodes, providers, web API)
-- `legacy/` \u2014 original n8n workflows (source of truth)
-- `migrations/` \u2014 SQL migrations for Supabase
-- `scripts/` \u2014 build, calibration, verification, deploy scripts
-- `tests/` \u2014 804+ pytest tests, 90%+ coverage
-- `docs/superpowers/specs/` \u2014 SP design specifications
-- `docs/superpowers/plans/` \u2014 SP implementation plans
-- `docs/runbooks/` \u2014 operational runbooks (deploy, shopify, etc)
-- `paper/` \u2014 academic paper (LaTeX)
-- `gui/` \u2014 Windows desktop GUI (CustomTkinter), single-file .exe wrapper
+- `el/` — core Python package (pipeline, nodes, providers, web API)
+- `legacy/` — original n8n workflows (source of truth)
+- `migrations/` — SQL migrations for Supabase
+- `scripts/` — build, calibration, verification, deploy scripts
+- `tests/` — 805+ pytest tests, 90%+ coverage
+- `docs/superpowers/specs/` — SP design specifications
+- `docs/superpowers/plans/` — SP implementation plans
+- `docs/runbooks/` — operational runbooks (deploy, shopify, etc)
+- `paper/` — academic paper (LaTeX)
+- `gui/` — Windows desktop GUI (CustomTkinter), single-file .exe wrapper
 
 ## COMMANDS:
 ```powershell
 # Run tests
-.venv\Scripts\python.exe -m pytest tests/ -q
+python -m pytest tests/ -q
 
 # Preview trends
-.venv\Scripts\python.exe -m el trends --top 10 --json
+python -m el trends --top 10 --json
 
 # Forge supplier preview
-.venv\Scripts\python.exe -m el forge --query "RCB jersey" --json
+python -m el forge --query "RCB jersey" --json
 
 # Sentinel preview (Forge + vetting + HIL bridge)
-.venv\Scripts\python.exe -m el sentinel --query "RCB jersey" --json
+python -m el sentinel --query "RCB jersey" --json
 
 # Verify env
-.venv\Scripts\python.exe scripts\verify_env.py
+python scripts/verify_env.py
 
 # Docker compose
 docker compose up -d
@@ -72,30 +72,34 @@ docker compose up -d
 ```
 
 ## RULES FOR EVERY SESSION:
-1. **Read the "Next action" line below FIRST** \u2014 it's the single most important thing to work on
-2. Do NOT re-explore file structures \u2014 trust this memory file
+1. **Read the "Next action" line below FIRST** — it's the single most important thing to work on
+2. Do NOT re-explore file structures — trust this memory file
 3. Commits must stay granular (one per plan task), squash at merge
 4. Every IO boundary must have fail-soft tests
 5. New env vars must be documented in `.env.example`
 6. Update this `.clinerules` file's "Next action" when completing a task
 
-## NEXT ACTION (as of June 3, 2026 10:00 PM):
-**Phase 2 live run IN PROGRESS**:
+## NEXT ACTION (as of June 3, 2026 11:40 PM):
+**End-to-end pipeline bugfixes applied (working tree)**:
 
-- [x] PR #24 merged \u2192 main (squash commit: 9286ba6)
-- [x] Main branch: tests pass (804/804)
-- [x] `.env` updated with forge/Sentinel vars
-- [x] Sentinel preview LIVE: `python -m el sentinel --query "RCB jersey" --json` \u2192 2 products passed vetting \u2705
-- [x] Trends preview LIVE: `python -m el trends --top 5 --json` \u2192 156 topics, 120 AI-scored, top trend "Lumio Vision 9 55-Inch TV" \u2705
+### ✅ BUG FIXES COMPLETED (June 3):
+- [x] **Bug 1** — `docker-compose.yml`: both `api` and `worker` services now default to `.env` instead of `tests/fixtures/sp8-compose.env`. Worker gets real TELEGRAM_HIL_BOT_TOKEN so HIL poller works.
+- [x] **Bug 2** — `el/hil_poller.py`: `_upload_approved_to_shopify` now queries ALL `approval_status = 'approved'` rows, clears store, then uploads each. Startup sync runs at top of `poll_loop()` so Docker restart auto-restores store.
+- [x] **Bug 3** — `el/pipeline.py`: pipeline step order fixed — `prepare_telegram_card` runs BEFORE `download_product_image` (so images are downloaded for cards, not 0).
+- [x] **Bug 4** — `el/pipeline.py`: `stochastic_logger.run(ctx)` + `supabase_insert_hil_reviews.run(ctx)` now run after `phase4_candidate_selection` and before CJ/Sheets/TG steps, ensuring `hil_review_rows` is populated for Telegram card prep.
+- [x] **Bug 5** — Shopify auth uses OAuth client_credentials only (SHOPIFY_ADMIN_API_TOKEN empty). Not changed.
+- [x] All 805 tests still pass after fixes.
+
+### 🔄 NEXT: Phase 2 live run continues
 - [ ] Forge preview running: `python -m el forge --from-fenix --top 3 --json` (started ~20:27, still running)
 - [ ] Monitor pass rates via GET /api/sentinel/summary (blocked on private schema exposure)
 - [ ] Tune thresholds after 10-20 real HIL responses
 - [ ] Gradually increase SENTINEL_PROVIDER_CAP (currently 5)
 
-### \U0001f4cb PENDING USER ACTION:
-- Go to Supabase Dashboard \u2192 API Settings \u2192 Exposed Schemas and add `private` to the exposed schemas list (required for sentinel_log telemetry + SP7 paper queries)
+### 📋 PENDING USER ACTION:
+- Go to Supabase Dashboard → API Settings → Exposed Schemas and add `private` to the exposed schemas list (required for sentinel_log telemetry + SP7 paper queries)
 
 ## REPO:
 - GitHub: `https://github.com/sadine27/EL-SEM-II.git` (origin)
 - Latest commit: `9286ba6` (main)
-- PR #24: merged \u2705
+- PR #24: merged ✅
