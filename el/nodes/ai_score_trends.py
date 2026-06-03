@@ -27,7 +27,7 @@ import re
 
 from el import config
 from el.logger import get_logger
-from el.nodes.score_rank import CATEGORIES
+from el.nodes._score_config import CATEGORIES
 
 log = get_logger(__name__)
 

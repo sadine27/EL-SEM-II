@@ -1,0 +1,92 @@
+# EL-SEM-II Project Memory — DIVYESH SHARMA — PROJECT DUE: JUNE 4, 2026 (TOMORROW)
+
+## ⚡ CRITICAL: URGENCY LEVEL MAXIMUM
+The project deadline is **TOMORROW (June 4, 2026)**. Every session must immediately resume work on the highest-priority unfinished items. Do NOT spend time re-exploring file structures or re-reading docs unless absolutely necessary. Jump straight into the next action.
+
+## WHAT THIS PROJECT IS
+- **EL Python Port**: Faithful Python port of n8n workflows (`legacy/EL.json`) for e-commerce product discovery + HIL (Human-in-the-Loop) pipeline
+- **Phase 3 SaaS**: Full end-to-end SaaS build (SP1–SP9)
+- **Stack**: Python 3.12, Supabase/PostgreSQL+pgvector, Vertex AI/Gemini, Docker, FastAPI, n8n
+- **Deployed**: Docker Compose on laptop + Cloudflare Quick Tunnel. `/healthz` green.
+
+## CURRENT STATUS — June 3, 2026
+
+### ✅ MERGED TO MAIN (SP1–SP8):
+| SP | Status | Key deliverable |
+|----|--------|-----------------|
+| SP1 | ✅ | Telemetry foundation (433 tests) |
+| SP2 | ✅ | Source expansion |
+| SP3 | ✅ | Vision + pgvector embeddings |
+| SP4 | ✅ | FastAPI + RAG chat bot (555 tests) |
+| SP5 | ✅ | Outbound: Gmail SMTP + Shopify auto-store (602 tests) |
+| SP6 | ✅ | CRM minimal: supplier/dispute/niche tables + dashboard (661 tests) |
+| SP8 | ✅ | Docker + Laptop deploy verified (652/652 green + 1 opt-in skipped) |
+
+### ⬜ PENDING — SP7 (Paper Pipeline):
+- **Blocked on**: ≥100 logged HIL events in `private.hil_logging_events`
+- Branch: `feat/sp7-paper`
+- Deliverables: `scripts/research/ips_overrides.py`, `scripts/research/override_descriptive.py`, `scripts/research/paper_figures.py`, `paper/phase3_overrides.tex`
+
+### 🔴 SP9 — Forge + Sentinel HIL Provider (CURRENT PRIORITY):
+- Migration exists: `migrations/sp9_allow_forge_sentinel_hil_provider.sql`
+- This is the NEXT SUB-PROJECT in queue after SP8
+- Design spec likely in `docs/superpowers/specs/` (check for SP9 or forge-related docs)
+
+### 🟡 PENDING MIGRATIONS:
+- `migrations/combined_apply_all.sql` — all SP1→SP3→SP4→SP6 migrations, idempotent
+- `migrations/sp9_allow_forge_sentinel_hil_provider.sql` — SP9 migration
+- Apply in Supabase SQL Editor, expose `private` schema in API Settings → Exposed schemas
+
+### 🟡 PENDING PRODUCTION SMOKE:
+- SP5 production smoke: Gmail app password + Shopify dev store + live send/upload
+- POST /api/runs smoke (blocked on SP4 migration being applied in Supabase)
+
+## PROJECT STRUCTURE KEY:
+- `el/` — core Python package (pipeline, nodes, providers, web API)
+- `legacy/` — original n8n workflows (source of truth)
+- `migrations/` — SQL migrations for Supabase
+- `scripts/` — build, calibration, verification, deploy scripts
+- `tests/` — 652+ pytest tests, 90%+ coverage
+- `docs/superpowers/specs/` — SP design specifications
+- `docs/superpowers/plans/` — SP implementation plans
+- `docs/runbooks/` — operational runbooks (deploy, shopify, etc)
+- `paper/` — academic paper (LaTeX)
+
+## COMMANDS:
+```powershell
+# Run tests
+.venv\Scripts\python.exe -m pytest tests/ -q
+
+# Run pipeline (dry-run)
+.venv\Scripts\python.exe -m el run --dry-run
+
+# Verify env
+.venv\Scripts\python.exe scripts\verify_env.py
+
+# Docker compose
+docker compose up -d
+```
+
+## RULES FOR EVERY SESSION:
+1. **Read the "Next action" line below FIRST** — it's the single most important thing to work on
+2. Do NOT re-explore file structures — trust this memory file
+3. Commits must stay granular (one per plan task), squash at merge
+4. Every IO boundary must have fail-soft tests
+5. New env vars must be documented in `.env.example`
+6. Update this `.clinerules` file's "Next action" when completing a task
+
+## NEXT ACTION (as of June 3, 2026 4:56 PM):
+**Fenix Engine production-readiness — phase 2**: Continue with remaining Fenix items:
+
+  1. Add cost bounds to AI discovery node (ai_score_trends.py)
+  2. Strip retired sources from source registry
+  3. Add URL normalization to ai_trend_discovery
+  4. Separate Forge/Sentinel try/except in pipeline.py
+  5. Configurable timeout on RSS fetch call
+  6. Production defaults (upgrade AI model, add retry + backoff)
+  7. Full Fenix integration test
+  8. CLI color output
+
+## REPO:
+- GitHub: `https://github.com/sadine27/EL-SEM-II.git` (origin)
+- Latest commit: `84b797ee2505917bcac407ed35044ea57a4e8528`
