@@ -456,11 +456,11 @@ def mismatch_reasons(row: dict, context: dict) -> list[dict]:
             ])},
         ))
 
-    if row.get("source_provider") == "cj_dropshipping" and context["listed_num"] is not None and context["listed_num"] <= 0:
+    if row.get("source_provider") == "cj_dropshipping" and context["listed_num"] is not None and context["listed_num"] < 0:
         reasons.append(build_reason(
             "mismatch",
             "cj_not_listed",
-            "Blocked CJ product because listedNum is missing or non-positive.",
+            "Blocked CJ product because listedNum is negative (removed from CJ platform).",
             {"listed_num": context["listed_num"]},
         ))
 
@@ -865,4 +865,14 @@ def run(ctx: dict, *, selected_at: str | None = None) -> dict:
         "Phase 4 Candidate Selection: selected %d of %d candidates (eligible pool %d)",
         len(selected), len(rows), len(ctx["eligible_pool"]),
     )
+    if not selected:
+        prepared_all = [prepare_candidate(row) for row in rows]
+        for c in prepared_all[:10]:
+            codes = [r.get("code") for r in c.rejection_reasons]
+            log.warning(
+                "Phase4 rejected: %s | topic_intent=%s | codes=%s",
+                compact(c.row.get("product_name"))[:60],
+                c.context.get("topic_intent_type"),
+                codes,
+            )
     return ctx
