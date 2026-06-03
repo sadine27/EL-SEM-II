@@ -166,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         with error_handler():
-            pipeline.run()
+            pipeline.run({})
         return 0
     if args.command == "trends":
         _print_trends(args.top, args.json)
