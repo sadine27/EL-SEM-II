@@ -114,6 +114,256 @@ def _fetch_all_sources(sources, ctx: dict) -> list[TrendCandidate]:
     return aggregated
 
 
+def collect_and_rank(initial_ctx: dict | None = None) -> dict:
+    """Run only fetch → score → AI → rank (no downstream nodes).
+
+    Returns ``ctx["ranked_payload"]`` — a dict with ``metadata`` and ``trends``.
+    Useful for the ``python -m el trends`` preview CLI and for Forge/Sentinel
+    preview commands that need ranked topics without full pipeline execution.
+    """
+    ctx = dict(initial_ctx or {})
+    enabled_sources = _load_enabled_sources()
+    ctx["source_candidates"] = _fetch_all_sources(enabled_sources, ctx)
+    try:
+        ctx = score_rank.run(ctx)
+    except Exception:
+        log.exception("collect_and_rank: score_rank crashed")
+    try:
+        ctx = ai_score_trends.run(ctx)
+    except Exception:
+        log.exception("collect_and_rank: ai_score_trends crashed")
+    return ctx.get("ranked_payload") or {"metadata": {}, "trends": []}
+
+
+def preview_forge(*, query: str | None = None, from_fenix: bool = False, top: int = 10) -> dict:
+    """Preview supplier matches for a query or from Fenix-ranked trends.
+
+    Args:
+        query:    Single product query to source. Mutually exclusive with from_fenix.
+        from_fenix: If True, source the top-ranked Fenix trends.
+        top:      Number of trends/queries to process.
+
+    Returns dict with ``metadata`` and ``supplier_matches``, suitable for JSON
+    serialisation or CLI pretty-printing.
+    """
+    if not query and not from_fenix:
+        raise ValueError("preview_forge requires query or from_fenix=True")
+    try:
+        ctx: dict = {}
+        if from_fenix:
+            payload = collect_and_rank()
+            trends = (payload.get("trends") or [])[:top]
+            queries = [t["topic"] for t in trends if t.get("topic")]
+            ctx["fenix_payload"] = payload
+            mode = "fenix"
+        else:
+            queries = [query] if query else []
+            mode = "query"
+
+        if not queries:
+            return {"metadata": {"mode": mode, "queries": 0}, "supplier_matches": []}
+
+        import copy as _copy
+        from el import supabase
+        supabase_ctx = {}
+        try:
+            supabase_ctx = {"supabase": supabase.default_client()}
+        except Exception:
+            pass
+
+        # Load supplier sources, run each query
+        supplier_sources = supplier_search._load_enabled_sources()
+        supplier_matches = []
+        for q in queries:
+            q_matches = []
+            for src in supplier_sources:
+                try:
+                    cands = src.search_products(q, {**ctx, **supabase_ctx})
+                    for c in (cands or []):
+                        q_matches.append({
+                            "title": c.title,
+                            "source_id": c.source_id,
+                            "supplier_product_id": c.supplier_product_id,
+                            "cost": c.cost,
+                            "shipping_cost": c.shipping_cost,
+                            "stock": c.stock,
+                            "currency": getattr(c, "currency", "USD"),
+                            "landed_cost": getattr(c, "landed_cost", None),
+                            "match_score": getattr(c, "match_score", None),
+                            "shipping_days_min": getattr(c, "shipping_days_min", None),
+                            "shipping_days_max": getattr(c, "shipping_days_max", None),
+                            "image_url": getattr(c, "image_url", None),
+                            "product_url": getattr(c, "product_url", None),
+                        })
+                except Exception:
+                    log.exception("preview_forge: source %s crashed on query %r", src.SOURCE_ID, q)
+            supplier_matches.append({"query": q, "matches": q_matches})
+
+        return {
+            "metadata": {"mode": mode, "queries": len(queries)},
+            "supplier_matches": supplier_matches,
+        }
+    except Exception:
+        log.exception("preview_forge crashed")
+        return {"metadata": {"mode": "error"}, "supplier_matches": []}
+
+
+def _forge_pipeline_enabled() -> bool:
+    return (config.get("EL_FORGE_PIPELINE_ENABLED", "true") or "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def run_for_request(request_id: str, *, db_provider=None) -> str:
+    """Run the full pipeline on behalf of an on-demand request.
+
+    Args:
+        request_id:  Supabase row ID in the ``requests`` table.
+        db_provider: Injectable database provider (defaults to supabase).
+
+    Returns the final status string (``"running"``, ``"done"``, or ``"error"``).
+    """
+    from el import supabase as _supabase
+    try:
+        db = db_provider or _supabase.default_client()
+        # Support both supabase table() interface and minimal FakeDB interface
+        if hasattr(db, "select_rows"):
+            rows = db.select_rows(schema="public", table="requests", filters={"id": request_id}) or []
+            if not rows:
+                raise ValueError(f"request {request_id} not found")
+            record = rows[0]
+            db.update_rows(schema="public", table="requests", filters={"id": request_id}, updates={"status": "running"})
+        else:
+            row = db.table("requests").select("*").eq("id", request_id).execute()
+            if not row.data:
+                raise ValueError(f"request {request_id} not found")
+            record = row.data[0]
+            db.table("requests").update({"status": "running"}).eq("id", request_id).execute()
+        ctx = {
+            "run_request_id": request_id,
+            "niche": record.get("niche"),
+            "budget_usd": record.get("budget_usd"),
+            "dislikes": record.get("dislikes"),
+        }
+        run(ctx)
+        if hasattr(db, "update_rows"):
+            db.update_rows(schema="public", table="requests", filters={"id": request_id}, updates={"status": "done"})
+        else:
+            db.table("requests").update({"status": "done"}).eq("id", request_id).execute()
+        return "done"
+    except ValueError:
+        raise
+    except Exception:
+        log.exception("run_for_request: %s failed", request_id)
+        try:
+            import traceback as _tb
+            err_msg = _tb.format_exc()
+            updates = {"status": "error", "error_message": err_msg}
+            if hasattr(db, "update_rows"):
+                db.update_rows(schema="public", table="requests", filters={"id": request_id}, updates=updates)
+            else:
+                db.table("requests").update(updates).eq("id", request_id).execute()
+        except Exception:
+            pass
+        return "error"
+
+
+def preview_sentinel(*, query: str | None = None, from_fenix: bool = False, top: int = 10) -> dict:
+    """Preview supplier matches passed through the Sentinel vetting gate.
+
+    Args:
+        query:    Single product query to source and vet. Mutually exclusive with from_fenix.
+        from_fenix: If True, source and vet the top-ranked Fenix trends.
+        top:      Number of trends/queries to process.
+
+    Returns dict with ``metadata`` and ``sentinel_matches``.
+    """
+    if not query and not from_fenix:
+        raise ValueError("preview_sentinel requires query or from_fenix=True")
+    try:
+        # Get Forge matches first (reuse preview_forge internal logic)
+        forge_result = preview_forge(query=query, from_fenix=from_fenix, top=top)
+
+        # Run Sentinel vetting on each match
+        import copy as _copy
+        sentinel_matches = []
+        for item in forge_result.get("supplier_matches", []):
+            q = item["query"]
+            matches = item.get("matches", [])
+            # Convert dict matches back to SupplierCandidate-like objects for vetting
+            vetted = []
+            rejected = []
+            for m in matches:
+                try:
+                    from el.suppliers import SupplierCandidate
+                    cand = SupplierCandidate(
+                        title=m["title"],
+                        source_id=m["source_id"],
+                        supplier_product_id=m["supplier_product_id"],
+                        cost=m.get("cost", 0),
+                        shipping_cost=m.get("shipping_cost", 0),
+                        stock=m.get("stock", 0),
+                        currency=m.get("currency", "USD"),
+                        landed_cost=m.get("landed_cost"),
+                        match_score=m.get("match_score"),
+                        shipping_days_min=m.get("shipping_days_min"),
+                        shipping_days_max=m.get("shipping_days_max"),
+                        image_url=m.get("image_url"),
+                        product_url=m.get("product_url"),
+                    )
+                    # Convert to dict for sentinel_vetting which expects dicts with .get()
+                    cand_dict = {k: getattr(cand, k, None) for k in (
+                        "title", "source_id", "supplier_product_id", "cost", "currency",
+                        "shipping_cost", "stock", "landed_cost", "match_score",
+                        "shipping_days_min", "shipping_days_max", "image_url", "product_url",
+                    )}
+                    v_ctx = {"supplier_matches": [{"trend": {"topic": q, "rank": 1}, "query": q, "matches": [cand_dict]}]}
+                    v_ctx = sentinel_vetting.run(v_ctx)
+                    for group in v_ctx.get("sentinel_matches", []):
+                        for p in group.get("matches", []):
+                            vetted.append({
+                                "title": p.get("title"),
+                                "source_id": p.get("source_id"),
+                                "supplier_product_id": p.get("supplier_product_id"),
+                                "cost": p.get("cost"),
+                                "shipping_cost": p.get("shipping_cost"),
+                                "stock": p.get("stock"),
+                                "landed_cost": p.get("landed_cost"),
+                                "currency": p.get("currency"),
+                                "match_score": p.get("match_score"),
+                                "sentinel_score": p.get("sentinel_score"),
+                                "sentinel_decision": p.get("sentinel_decision"),
+                                "sentinel_warnings": p.get("sentinel_warnings"),
+                                "projected_sell_price": p.get("projected_sell_price"),
+                                "projected_margin_pct": p.get("projected_margin_pct"),
+                                "image_url": p.get("image_url"),
+                                "product_url": p.get("product_url"),
+                            })
+                        for r in group.get("rejected", []):
+                            rejected.append({
+                                "title": r.get("title"),
+                                "source_id": r.get("source_id"),
+                                "supplier_product_id": r.get("supplier_product_id"),
+                                "sentinel_rejection_reasons": r.get("sentinel_rejection_reasons"),
+                            })
+                except Exception:
+                    log.exception("preview_sentinel: vetting crashed for %r", m.get("title"))
+            sentinel_matches.append({
+                "query": q,
+                "matches": vetted,
+                "rejected": rejected,
+                "summary": {"evaluated": len(matches), "passed": len(vetted), "rejected": len(rejected)},
+            })
+
+        return {
+            "metadata": forge_result.get("metadata", {}),
+            "sentinel_matches": sentinel_matches,
+        }
+    except Exception:
+        log.exception("preview_sentinel crashed")
+        return {"metadata": {"mode": "error"}, "sentinel_matches": []}
+
+
 def run(ctx: dict) -> dict:
     """Run the daily pipeline batch against *ctx*.
 
@@ -178,6 +428,17 @@ def run(ctx: dict) -> dict:
             ctx = sentinel_vetting.run(ctx)
         except Exception:
             log.exception("EL pipeline: sentinel_vetting crashed")
+        # Normalize passing Sentinel matches into HIL review rows so they feed
+        # into phase4_candidate_selection alongside CJ/browserbase candidates.
+        try:
+            ctx = normalize_sentinel_review.run(ctx)
+        except Exception:
+            log.exception("EL pipeline: normalize_sentinel_review crashed")
+        # Re-merge review sources so sentinel_review_items are included.
+        try:
+            ctx = merge_review_sources.run(ctx)
+        except Exception:
+            log.exception("EL pipeline: merge_review_sources (re-merge) crashed")
     else:
         log.info("EL pipeline: Forge pipeline disabled — skipping supplier_search + sentinel_vetting")
 
@@ -213,6 +474,10 @@ def run(ctx: dict) -> dict:
     except Exception:
         log.exception("EL pipeline: prepare_sheet_rows crashed")
     try:
+        ctx = prepare_json_file.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: prepare_json_file crashed")
+    try:
         ctx = write_rows_to_sheet.run(ctx)
     except Exception:
         log.exception("EL pipeline: write_rows_to_sheet crashed")
@@ -225,11 +490,19 @@ def run(ctx: dict) -> dict:
     except Exception:
         log.exception("EL pipeline: create_curated_picks_tab crashed")
 
-    # ── Step 10: Curate picks → Telegram ──────────────────────────────────────
+    # ── Step 10: Curate picks → search queries → Telegram ────────────────────
     try:
         ctx = curate_picks.run(ctx)
     except Exception:
         log.exception("EL pipeline: curate_picks crashed")
+    try:
+        ctx = build_search_query.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: build_search_query crashed")
+    try:
+        ctx = write_curated_picks.run(ctx)
+    except Exception:
+        log.exception("EL pipeline: write_curated_picks crashed")
     try:
         ctx = download_product_image.run(ctx)
     except Exception:

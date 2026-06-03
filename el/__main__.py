@@ -17,6 +17,19 @@ def _prefer_utf8_stdout() -> None:
             pass
 
 
+def _color(code: int, text: str) -> str:
+    """Wrap *text* in ANSI escape code *code*; no-op when stdout is not a tty."""
+    if not sys.stdout.isatty():
+        return text
+    return f"\033[{code}m{text}\033[0m"
+
+
+def _green(text: str) -> str:   return _color(32, text)
+def _yellow(text: str) -> str:  return _color(33, text)
+def _cyan(text: str) -> str:    return _color(36, text)
+def _bold(text: str) -> str:    return _color(1, text)
+
+
 def _print_trends(top: int, as_json: bool) -> None:
     payload = pipeline.collect_and_rank()
     trends = payload.get("trends", [])[:top]
@@ -28,16 +41,24 @@ def _print_trends(top: int, as_json: bool) -> None:
     meta = payload.get("metadata", {})
     ai = meta.get("ai_scored_count")
     mode = f"AI-scored ({ai} topics)" if ai else "keyword-scored (no Vertex creds / AI off)"
-    print(f"\nFenix trends — {meta.get('total_topics', len(trends))} topics, {mode}")
-    print(f"sources: {', '.join(meta.get('sources', [])) or 'none'}\n")
-    print(f"{'#':>3}  {'intent':>6}  {'vel':>5}  {'src':>3}  category / topic")
-    print("-" * 72)
+    title = _bold(f"Fenix trends — {meta.get('total_topics', len(trends))} topics")
+    print(f"\n{title}, {_cyan(mode)}")
+    srcs = meta.get("sources", [])
+    print(f"{_yellow('sources')}: {', '.join(srcs) or 'none'}\n")
+    table_header = f"{'#':>3}  {'intent':>6}  {'vel':>5}  {'src':>3}  category / topic"
+    print(_green(table_header))
+    print(_green("-" * 72))
     for t in trends:
         vel = t.get("velocity")
         vel_s = f"{vel:+.2f}" if isinstance(vel, (int, float)) else "  -  "
         cats = ",".join(t.get("suggested_categories", []))
-        print(f"{t.get('rank', '?'):>3}  {t.get('product_intent_score', 0):>6.2f}  "
-              f"{vel_s:>5}  {t.get('cross_source_count', 1):>3}  [{cats}] {t.get('topic', '')}")
+        score = t.get("product_intent_score", 0)
+        # Colour-code intent score: high → green, mid → yellow, low → red
+        score_col = _green(f"{score:>6.2f}") if score >= 0.6 else (
+            _yellow(f"{score:>6.2f}") if score >= 0.3 else _color(31, f"{score:>6.2f}")
+        )
+        print(f"{t.get('rank', '?'):>3}  {score_col}  "
+              f"{vel_s:>5}  {t.get('cross_source_count', 1):>3}  [{_cyan(cats)}] {t.get('topic', '')}")
     print()
 
 

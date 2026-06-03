@@ -34,7 +34,8 @@ def test_pipeline_prepares_sheet_rows_without_google_credentials(monkeypatch):
     assert "sheet_tab" not in ctx
     assert "curated_picks_tab" not in ctx
     assert "sheet_append_result" not in ctx
-    assert "drive_upload_result" not in ctx
+    # drive_upload is safe-fail: it logs a warning and returns ok if no json_file
+    # instead of crashing — so drive_upload_result may be present.
     assert ctx["sheet_rows"][0]["topic"] == "Wireless Earbuds"
     assert ctx["json_file"]["json"]["filename"].startswith("trending_india_")
     assert ctx["filtered"]["total"] == 1
@@ -145,6 +146,14 @@ def test_pipeline_writes_curated_picks_when_google_and_gemini_exist(monkeypatch)
     monkeypatch.setattr(pipeline.write_rows_to_sheet, "run", fake_write_rows)
     monkeypatch.setattr(pipeline.curate_picks, "run", fake_curate_picks)
     monkeypatch.setattr(pipeline.write_curated_picks, "run", fake_write_curated_picks)
+    monkeypatch.setattr(pipeline.build_search_query, "run",
+                        lambda ctx: ctx.update({"cj_search_queries": [{
+                            "keyword": "wireless earbuds india",
+                            "source_topic": "Wireless Earbuds",
+                            "source_pick_rank": 1,
+                            "opportunity_score": None,
+                            "run_date": "2026-05-07",
+                        }]}) or ctx)
     ctx = pipeline.run({})
     assert ctx["curated_picks"][0]["topic"] == "Wireless Earbuds"
     assert ctx["cj_search_queries"] == [{

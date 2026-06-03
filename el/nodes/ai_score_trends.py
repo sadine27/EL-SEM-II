@@ -36,7 +36,7 @@ log = get_logger(__name__)
 
 _DEFAULT_BATCH = 40
 _DEFAULT_MAX_TOPICS = 120
-_DEFAULT_MODEL = "gemini-2.5-pro-exp-03-25"
+_DEFAULT_MODEL = "gemini-2.5-flash-001"
 _DEFAULT_MAX_COST_USD = 0.05
 
 # Model pricing per 1M tokens (Gemini 2.5 Flash, Vertex pricing as of 2025).

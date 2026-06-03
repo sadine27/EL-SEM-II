@@ -75,17 +75,20 @@ docker compose up -d
 5. New env vars must be documented in `.env.example`
 6. Update this `.clinerules` file's "Next action" when completing a task
 
-## NEXT ACTION (as of June 3, 2026 4:56 PM):
-**Fenix Engine production-readiness — phase 2**: Continue with remaining Fenix items:
+## NEXT ACTION (as of June 3, 2026 6:22 PM):
+**SP9 — Forge + Sentinel HIL Provider completed ✅**:
 
-  1. Add cost bounds to AI discovery node (ai_score_trends.py)
-  2. Strip retired sources from source registry
-  3. Add URL normalization to ai_trend_discovery
-  4. Separate Forge/Sentinel try/except in pipeline.py
-  5. Configurable timeout on RSS fetch call
-  6. Production defaults (upgrade AI model, add retry + backoff)
-  7. Full Fenix integration test
-  8. CLI color output
+  - [x] `normalize_sentinel_review.run(ctx)` wired into `pipeline.run()` after `sentinel_vetting`
+  - [x] `merge_review_sources.run(ctx)` re-run after normalization so `sentinel_review_items` feed into `review_candidates`
+  - [x] Pipeline-level integration test verifies Forge→Sentinel→HIL bridge end-to-end (10/10 passing)
+  - [x] Full suite: 804 passed, 1 skipped (no regressions from 803)
+  - [x] Migration exists: `migrations/sp9_allow_forge_sentinel_hil_provider.sql`
+  - [x] CLI preview: `python -m el forge --query "RCB jersey" --json`
+
+**Next: SP7 — Paper Pipeline**
+  - Blocked on: ≥100 logged HIL events in `private.hil_logging_events`
+  - Branch: `feat/sp7-paper`
+  - Deliverables: `scripts/research/ips_overrides.py`, `scripts/research/override_descriptive.py`, `scripts/research/paper_figures.py`, `paper/phase3_overrides.tex`
 
 ## REPO:
 - GitHub: `https://github.com/sadine27/EL-SEM-II.git` (origin)
