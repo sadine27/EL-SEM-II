@@ -23,7 +23,7 @@ class BrowserbaseProvider:
         """Fetch URL content via Browserbase. Returns {content: str, statusCode: int, error?: str}."""
         try:
             headers = {
-                "Authorization": f"Bearer {self.api_key}",
+                "X-BB-API-Key": self.api_key,
                 "Content-Type": "application/json",
             }
             body = {
