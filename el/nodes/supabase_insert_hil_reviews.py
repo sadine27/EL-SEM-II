@@ -51,11 +51,15 @@ def run(ctx: dict, provider: supabase.SupabaseRestProvider | None = None) -> dic
 
     active_provider = provider or supabase.SupabaseRestProvider()
     try:
+        # ignore-duplicates: skip rows that already exist (reviewed or still-pending
+        # from an earlier same-day run). merge-duplicates would reset approval_status
+        # back to pending on already-reviewed rows, violating the coherence constraint.
         data = active_provider.upsert_rows(
             schema=supabase.HIL_REVIEWS_SCHEMA,
             table=supabase.HIL_REVIEWS_TABLE,
             rows=rows,
             conflict_columns=supabase.HIL_REVIEWS_CONFLICT_COLUMNS,
+            resolution="ignore-duplicates",
         )
     except Exception as exc:
         ctx["hil_reviews_upsert_result"] = {
@@ -63,6 +67,9 @@ def run(ctx: dict, provider: supabase.SupabaseRestProvider | None = None) -> dic
             "rows": len(rows),
             "error": str(exc),
         }
+        # Set empty list so upload_shopify_products knows HIL is active
+        # but has no approved rows — prevents fallback to curated_picks.
+        ctx["hil_review_rows"] = []
         log.exception("Supabase Insert (HIL Reviews) failed")
         return ctx
 

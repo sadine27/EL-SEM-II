@@ -96,7 +96,9 @@ def test_supabase_insert_hil_reviews_continue_on_fail_shape():
     assert ctx["hil_reviews_upsert_result"]["ok"] is False
     assert ctx["hil_reviews_upsert_result"]["rows"] == 1
     assert "database down" in ctx["hil_reviews_upsert_result"]["error"]
-    assert "hil_review_rows" not in ctx
+    # hil_review_rows set to [] on failure so upload_shopify_products
+    # knows HIL is active but has no approved rows (blocks curated_picks fallback).
+    assert ctx["hil_review_rows"] == []
 
 
 # -- SP1 additions: hil_slate source + logging_event_id stamping ---------------
@@ -105,12 +107,13 @@ class _CapturingProvider:
     def __init__(self):
         self.upsert_calls: list[dict] = []
 
-    def upsert_rows(self, *, schema: str, table: str, rows: list[dict], conflict_columns):
+    def upsert_rows(self, *, schema: str, table: str, rows: list[dict], conflict_columns, resolution: str = "merge-duplicates"):
         self.upsert_calls.append({
             "schema": schema,
             "table": table,
             "rows": rows,
             "conflict_columns": conflict_columns,
+            "resolution": resolution,
         })
         return [{"id": i + 1, **r} for i, r in enumerate(rows)]
 

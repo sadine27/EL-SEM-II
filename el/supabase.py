@@ -65,6 +65,7 @@ class SupabaseRestProvider:
         table: str,
         rows: list[dict],
         conflict_columns: tuple[str, ...],
+        resolution: str = "merge-duplicates",
     ) -> list[dict]:
         endpoint = urljoin(self.url, f"rest/v1/{table}")
         headers = {
@@ -74,7 +75,7 @@ class SupabaseRestProvider:
             "Accept": "application/json",
             "Accept-Profile": schema,
             "Content-Profile": schema,
-            "Prefer": "resolution=merge-duplicates,return=representation",
+            "Prefer": f"resolution={resolution},return=representation",
         }
         resp = requests.post(
             endpoint,

@@ -26,10 +26,10 @@ class _UnifiedFakeProvider:
         self.inserts.append({"schema": schema, "table": table, "rows": rows})
         return [{"id": i + 1, **r} for i, r in enumerate(rows)]
 
-    def upsert_rows(self, *, schema, table, rows, conflict_columns):
+    def upsert_rows(self, *, schema, table, rows, conflict_columns, resolution="merge-duplicates"):
         self.upserts.append({
             "schema": schema, "table": table, "rows": rows,
-            "conflict_columns": conflict_columns,
+            "conflict_columns": conflict_columns, "resolution": resolution,
         })
         return [{"id": i + 1, **r} for i, r in enumerate(rows)]
 
