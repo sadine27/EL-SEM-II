@@ -364,6 +364,121 @@ def preview_sentinel(*, query: str | None = None, from_fenix: bool = False, top:
         return {"metadata": {"mode": "error"}, "sentinel_matches": []}
 
 
+def _archive_approved_hil_rows() -> None:
+    """Archive all approved HIL rows to a local file and reset to 'archived' in Supabase.
+
+    Runs at pipeline start so old approvals never bleed into the new run's Shopify sync.
+    The archive file is write-only history — nothing in the sync path reads it.
+    """
+    import json
+    import os
+    from datetime import datetime, timezone
+    from el.supabase import HIL_REVIEWS_SCHEMA, HIL_REVIEWS_TABLE, SupabaseRestProvider
+    try:
+        db = SupabaseRestProvider()
+        approved = db.select_rows(
+            schema=HIL_REVIEWS_SCHEMA,
+            table=HIL_REVIEWS_TABLE,
+            filters={"approval_status": "eq.approved"},
+            limit=500,
+        )
+        if not approved:
+            log.info("EL pipeline: no approved rows to archive")
+            return
+
+        archive_path = "/app/data/approved_products_archive.json"
+        os.makedirs(os.path.dirname(archive_path), exist_ok=True)
+        existing: list = []
+        if os.path.exists(archive_path):
+            try:
+                with open(archive_path) as f:
+                    existing = json.load(f)
+            except Exception:
+                existing = []
+
+        existing.append({
+            "archived_at": datetime.now(timezone.utc).isoformat(),
+            "products": approved,
+        })
+        with open(archive_path, "w") as f:
+            json.dump(existing, f, indent=2, ensure_ascii=False, default=str)
+        log.info("EL pipeline: archived %d approved row(s) to %s", len(approved), archive_path)
+
+        db.update_rows(
+            schema=HIL_REVIEWS_SCHEMA,
+            table=HIL_REVIEWS_TABLE,
+            filters={"approval_status": "eq.approved"},
+            updates={"approval_status": "archived"},
+        )
+        log.info("EL pipeline: reset %d approved row(s) to 'archived' in Supabase", len(approved))
+    except Exception:
+        log.exception("EL pipeline: archive approved rows failed — continuing")
+
+
+def _wait_for_hil_approvals(ctx: dict, *, timeout_minutes: int = 30, poll_interval: int = 30) -> None:
+    """Block until all HIL rows from this run are reviewed or the timeout expires.
+
+    Refreshes ctx['hil_review_rows'] with the latest data from Supabase before returning
+    so that the Shopify upload at Step 13 sees the actual approval statuses.
+    """
+    import time
+    from el.supabase import HIL_REVIEWS_SCHEMA, HIL_REVIEWS_TABLE, SupabaseRestProvider
+
+    rows = ctx.get("hil_review_rows") or []
+    if not rows:
+        return
+
+    row_ids = [str(r["id"]) for r in rows if r.get("id")]
+    if not row_ids:
+        return
+
+    id_filter = f"in.({','.join(row_ids)})"
+    db = SupabaseRestProvider()
+    deadline = time.time() + timeout_minutes * 60
+    log.info(
+        "EL pipeline: waiting up to %d min for HIL approvals on %d row(s)",
+        timeout_minutes, len(row_ids),
+    )
+
+    while time.time() < deadline:
+        try:
+            pending = db.select_rows(
+                schema=HIL_REVIEWS_SCHEMA,
+                table=HIL_REVIEWS_TABLE,
+                filters={"approval_status": "eq.pending", "id": id_filter},
+            )
+            if not pending:
+                log.info("EL pipeline: all HIL rows reviewed — proceeding")
+                updated = db.select_rows(
+                    schema=HIL_REVIEWS_SCHEMA,
+                    table=HIL_REVIEWS_TABLE,
+                    filters={"id": id_filter},
+                )
+                ctx["hil_review_rows"] = updated
+                return
+            log.info(
+                "EL pipeline: %d row(s) still pending — next check in %ds",
+                len(pending), poll_interval,
+            )
+        except Exception:
+            log.exception("EL pipeline: HIL approval poll error — retrying")
+        time.sleep(poll_interval)
+
+    log.warning(
+        "EL pipeline: HIL approval timeout (%d min) — proceeding with current approvals",
+        timeout_minutes,
+    )
+    try:
+        updated = db.select_rows(
+            schema=HIL_REVIEWS_SCHEMA,
+            table=HIL_REVIEWS_TABLE,
+            filters={"id": id_filter},
+        )
+        ctx["hil_review_rows"] = updated
+    except Exception:
+        log.exception("EL pipeline: final HIL row refresh failed")
+
+
 def run(ctx: dict) -> dict:
     """Run the daily pipeline batch against *ctx*.
 
@@ -385,7 +500,8 @@ def run(ctx: dict) -> dict:
     """
     log.info("EL pipeline: batch start")
 
-    # ── Step 0: Clear old Shopify products before the run ────────────────────
+    # ── Step 0: Archive old approved rows + clear Shopify ───────────────────
+    _archive_approved_hil_rows()
     if config.get("SHOPIFY_STORE_DOMAIN"):
         try:
             from el.nodes.upload_shopify_products import _clear_existing_products
@@ -547,6 +663,12 @@ def run(ctx: dict) -> dict:
         ctx = mark_telegram_text_fallback.run(ctx)
     except Exception:
         log.exception("EL pipeline: mark_telegram_text_fallback crashed")
+
+    # ── Step 10b: Wait for human to approve/reject Telegram cards ────────────
+    try:
+        _wait_for_hil_approvals(ctx)
+    except Exception:
+        log.exception("EL pipeline: HIL approval wait crashed — continuing")
 
     # ── Step 11: Outbound (email + notify) ────────────────────────────────────
     try:
