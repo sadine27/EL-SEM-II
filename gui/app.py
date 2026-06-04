@@ -399,7 +399,7 @@ class ELPipelineApp(ctk.CTk):
         self._after_ui(self._start_spinner)
 
         cmd = [
-            "docker", "compose", "run", "--rm",
+            "docker", "compose", "run", "--rm", "-T",
             "-e", "EL_ENV_FILE=.env",
             "worker", "python", "-m", "el", "run",
         ]
