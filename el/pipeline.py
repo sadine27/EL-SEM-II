@@ -408,9 +408,9 @@ def _archive_approved_hil_rows() -> None:
             schema=HIL_REVIEWS_SCHEMA,
             table=HIL_REVIEWS_TABLE,
             filters={"approval_status": "eq.approved"},
-            updates={"approval_status": "archived"},
+            updates={"approval_status": "skipped"},
         )
-        log.info("EL pipeline: reset %d approved row(s) to 'archived' in Supabase", len(approved))
+        log.info("EL pipeline: reset %d approved row(s) to 'skipped' in Supabase", len(approved))
     except Exception:
         log.exception("EL pipeline: archive approved rows failed — continuing")
 
